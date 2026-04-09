@@ -21,7 +21,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 7, 
+      version: 8, 
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -48,7 +48,7 @@ class DatabaseHelper {
         flavor_profile TEXT,
         rating REAL,
         notes TEXT,
-        transcript_error TEXT
+        transcript_error TEXT,`n        validation_result TEXT
       )
     ''');
   }
@@ -76,6 +76,10 @@ class DatabaseHelper {
     }
     if (oldVersion < 7) {
       try { await db.execute('ALTER TABLE recipes ADD COLUMN transcript_error TEXT'); } catch(e) {}
+    }
+    if (oldVersion < 8) {
+      try { await db.execute('ALTER TABLE recipes ADD COLUMN validation_result TEXT'); } catch(e) {}
+    } catch(e) {}
     }
   }
 
@@ -114,3 +118,4 @@ class DatabaseHelper {
     db.close();
   }
 }
+

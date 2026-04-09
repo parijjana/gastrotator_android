@@ -6,6 +6,7 @@ import '../data/database_helper.dart';
 import '../models/recipe.dart';
 import '../models/transcript_error.dart';
 import '../models/video_length.dart';
+import '../models/validation_result.dart';
 import '../services/youtube_service.dart';
 import '../services/gemini_service.dart';
 
@@ -148,6 +149,7 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
       transcript: transcript,
       importStatus: "Transcript Fetched",
       transcriptError: TranscriptFetchError.none,
+      validationResult: ValidationResult.valid,
     ));
     final updated = state.firstWhere((r) => r.id == recipe.id);
     autoProcessRecipe(updated);
@@ -339,10 +341,10 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
       return;
     }
 
-    await updateRecipe(recipe.copyWith(importStatus: "Analyzing Language..."));
     final gemini = GeminiService(apiKey: apiKey);
-    
+
     // 1. Detect Language
+    await updateRecipe(recipe.copyWith(importStatus: "Analyzing Language..."));
     final langCode = await gemini.detectLanguage(transcript);
     if (langCode != null && langCode != 'en') {
       await updateRecipe(recipe.copyWith(
@@ -353,16 +355,34 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
       return;
     }
 
-    // 2. Length Check & Processing Strategy
-    String finalInputText = transcript;
-    if (recipe.videoLength == VideoLength.long && recipe.importStatus != "Processing Confirmed") {
-      await updateRecipe(recipe.copyWith(importStatus: "Awaiting Confirmation (Long Video)"));
+    // 2. Content Validation
+    await updateRecipe(recipe.copyWith(importStatus: "Validating Content..."));
+    final validation = await gemini.validateContent(transcript);
+    final valResult = validation['result'] as ValidationResult;
+    
+    if (valResult == ValidationResult.wrongDomain || valResult == ValidationResult.insufficientContent) {
+      await updateRecipe(recipe.copyWith(
+        importStatus: "No transcript found", 
+        validationResult: valResult,
+        flavorProfile: validation['content_type'], 
+      ));
       return;
     }
 
-    if (recipe.videoLength == VideoLength.medium || (recipe.videoLength == VideoLength.long && recipe.importStatus == "Processing Confirmed")) {
-      await updateRecipe(recipe.copyWith(importStatus: "Summarizing Segments..."));
-      final segments = recipe.segments;
+    // Update with validation warning if any, but continue
+    final recipeWithVal = recipe.copyWith(validationResult: valResult);
+    await updateRecipe(recipeWithVal);
+
+    // 3. Length Check & Processing Strategy
+    String finalInputText = transcript;
+    if (recipeWithVal.videoLength == VideoLength.long && recipeWithVal.importStatus != "Processing Confirmed") {
+      await updateRecipe(recipeWithVal.copyWith(importStatus: "Awaiting Confirmation (Long Video)"));
+      return;
+    }
+
+    if (recipeWithVal.videoLength == VideoLength.medium || (recipeWithVal.videoLength == VideoLength.long && recipeWithVal.importStatus == "Processing Confirmed")) {
+      await updateRecipe(recipeWithVal.copyWith(importStatus: "Summarizing Segments..."));
+      final segments = recipeWithVal.segments;
       if (segments != null && segments.isNotEmpty) {
         List<String> summaries = [];
         String currentChunk = "";
@@ -387,22 +407,23 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
       }
     }
 
-    await updateRecipe(recipe.copyWith(importStatus: "AI Processing..."));
+    await updateRecipe(recipeWithVal.copyWith(importStatus: "AI Processing..."));
     final result = await gemini.extractRecipeFromContent(
-      title: recipe.youtubeTitle ?? recipe.dishName,
-      channel: recipe.youtubeChannel ?? "Unknown",
-      url: recipe.youtubeUrl!,
-      thumbnail: recipe.thumbnailUrl,
+      title: recipeWithVal.youtubeTitle ?? recipeWithVal.dishName,
+      channel: recipeWithVal.youtubeChannel ?? "Unknown",
+      url: recipeWithVal.youtubeUrl!,
+      thumbnail: recipeWithVal.thumbnailUrl,
       transcript: finalInputText,
     );
 
     if (result != null) {
       await updateRecipe(result.copyWith(
-        id: recipe.id,
+        id: recipeWithVal.id,
         importStatus: "Completed",
+        validationResult: valResult, // Carry forward
       ));
     } else {
-      await updateRecipe(recipe.copyWith(importStatus: "Failed: Gemini"));
+      await updateRecipe(recipeWithVal.copyWith(importStatus: "Failed: Gemini"));
       throw "Gemini extraction failed";
     }
   }

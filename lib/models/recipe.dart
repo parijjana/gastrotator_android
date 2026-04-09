@@ -1,3 +1,4 @@
+import 'validation_result.dart';
 import 'video_length.dart';
 import 'transcript_error.dart';
 
@@ -16,13 +17,14 @@ class Recipe {
   final double? totalWeightGrams;
   final String? cookingTime;
   final String? transcript;
-  final String? importStatus;`n  final double? durationSeconds;`n  final List<Map<String, dynamic>>? segments;
+  final String? importStatus;`n  final double? durationSeconds;`n  final List<Map<String, dynamic>>? segments;`n  final ValidationResult validationResult;
   final String? flavorProfile; 
   final double? rating;        
   final String? notes;
   final TranscriptFetchError transcriptError;
 
   Recipe({
+    this.validationResult = ValidationResult.valid,
     this.transcriptError = TranscriptFetchError.none,
     this.id,
     required this.dishName,
@@ -65,6 +67,7 @@ class Recipe {
       'rating': rating,
       'notes': notes,
       'transcript_error': transcriptError.name,
+      'validation_result': validationResult.name,
     };
   }
 
@@ -88,6 +91,7 @@ class Recipe {
       flavorProfile: map['flavor_profile'],
       rating: map['rating']?.toDouble(),
       notes: map['notes'],
+      validationResult: ValidationResult.values.firstWhere((e) => e.name == (map['validation_result'] ?? 'valid'), orElse: () => ValidationResult.valid),
       transcriptError: TranscriptFetchError.values.firstWhere(
         (e) => e.name == (map['transcript_error'] ?? 'none'),
         orElse: () => TranscriptFetchError.none,
@@ -144,7 +148,7 @@ class Recipe {
     String? flavorProfile,
     double? rating,
     String? notes,
-    TranscriptFetchError? transcriptError,
+    TranscriptFetchError? transcriptError,`n    ValidationResult? validationResult,
   }) {
     return Recipe(
       id: id ?? this.id,
@@ -165,9 +169,10 @@ class Recipe {
       flavorProfile: flavorProfile ?? this.flavorProfile,
       rating: rating ?? this.rating,
       notes: notes ?? this.notes,
-      transcriptError: transcriptError ?? this.transcriptError,
+      transcriptError: transcriptError ?? this.transcriptError,`n      validationResult: validationResult ?? this.validationResult,
     );
   }
 }
+
 
 

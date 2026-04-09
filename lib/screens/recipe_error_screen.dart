@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/recipe.dart';
 import '../models/transcript_error.dart';
 import '../models/video_length.dart';
+import '../models/validation_result.dart';
 import '../providers/providers.dart';
 
 class RecipeErrorScreen extends ConsumerWidget {
@@ -79,10 +80,14 @@ class RecipeErrorScreen extends ConsumerWidget {
                 Builder(
                   builder: (context) {
                     String message = currentRecipe.transcriptError.userMessage;
-                    if (currentRecipe.transcriptError == TranscriptFetchError.unsupportedLanguage) {
+                    
+                    if (currentRecipe.validationResult != ValidationResult.valid) {
+                      message = currentRecipe.validationResult.userMessage(currentRecipe.flavorProfile);
+                    } else if (currentRecipe.transcriptError == TranscriptFetchError.unsupportedLanguage) {
                       final langName = Recipe.getLanguageName(currentRecipe.category);
                       message = "This video's transcript is in \. Only English is supported right now.";
                     }
+
                     return Text(
                       currentRecipe.importStatus == "No transcript found"
                           ? message
@@ -132,6 +137,7 @@ class RecipeErrorScreen extends ConsumerWidget {
                       final resetRecipe = currentRecipe.copyWith(
                         importStatus: "Placeholder Created",
                         transcriptError: TranscriptFetchError.none,
+                        validationResult: ValidationResult.valid,
                       );
                       await ref.read(recipesProvider.notifier).updateRecipe(resetRecipe);
                       await ref.read(recipesProvider.notifier).autoProcessRecipe(resetRecipe);

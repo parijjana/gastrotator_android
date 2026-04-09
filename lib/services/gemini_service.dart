@@ -63,6 +63,49 @@ class GeminiService {
     }
   }
 
+    Future<Map<String, dynamic>> validateContent(String transcript) async {
+    if (transcript.split(' ').length < 200) {
+      return {'result': ValidationResult.insufficientContent};
+    }
+
+    final String modelName = await discoverLatestModel();
+    final model = _mockModel ?? GenerativeModel(
+      model: modelName,
+      apiKey: apiKey,
+    );
+
+    final prompt = """
+    You are a content classifier for a cooking app. Analyse the following transcript and return a JSON object with exactly these fields:
+    {
+      "is_cooking_content": boolean,
+      "confidence": "high" | "medium" | "low",
+      "content_type": string,
+      "has_recipe": boolean,
+      "reason": string
+    }
+    Return only valid JSON. No preamble, no markdown.
+    
+    Transcript:
+    \
+    """;
+
+    try {
+      final response = await model.generateContent([Content.text(prompt)]);
+      if (response.text == null) return {'result': ValidationResult.lowConfidence};
+      
+      final data = json.decode(response.text!.replaceAll('`json', '').replaceAll('`', '').trim());
+      
+      if (data['confidence'] == 'low') return {'result': ValidationResult.lowConfidence};
+      if (data['is_cooking_content'] == false) return {'result': ValidationResult.wrongDomain, 'content_type': data['content_type']};
+      if (data['has_recipe'] == false) return {'result': ValidationResult.foodAdjacent};
+      
+      return {'result': ValidationResult.valid};
+    } catch (e) {
+      debugPrint("Validation Error: \");
+      return {'result': ValidationResult.lowConfidence};
+    }
+  }
+
   Recipe? parseRecipe(String jsonText, String title, String channel, String url, String? thumbnail) {
     try {
       String cleanedJson = jsonText.trim();
@@ -179,5 +222,6 @@ No preamble, no commentary.
     return null;
   }
 }
+
 
 
