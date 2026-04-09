@@ -94,7 +94,30 @@ class Recipe {
     );
   }
 
-  Recipe copyWith({
+  static String getLanguageName(String code) {
+    final map = {
+      'en': 'English',
+      'hi': 'Hindi',
+      'bn': 'Bengali',
+      'ta': 'Tamil',
+      'te': 'Telugu',
+      'mr': 'Marathi',
+      'gu': 'Gujarati',
+      'kn': 'Kannada',
+      'ml': 'Malayalam',
+      'pa': 'Punjabi',
+      'es': 'Spanish',
+      'fr': 'French',
+      'de': 'German',
+      'it': 'Italian',
+      'ja': 'Japanese',
+      'ko': 'Korean',
+      'zh': 'Chinese',
+    };
+    return map[code.toLowerCase()] ?? code.toUpperCase();
+  }
+
+  Recipe copyWith({{
     int? id,
     String? dishName,
     String? category,
@@ -138,3 +161,4 @@ class Recipe {
     );
   }
 }
+

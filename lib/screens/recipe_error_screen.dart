@@ -63,15 +63,24 @@ class RecipeErrorScreen extends ConsumerWidget {
                   ),
                 ),
               ] else
-                Text(
-                  currentRecipe.importStatus == "No transcript found"
-                      ? currentRecipe.transcriptError.userMessage
-                      : "The AI encountered an error while processing this recipe: \",
-                  style: GoogleFonts.manrope(
-                    fontSize: 16,
-                    height: 1.5,
-                    color: Colors.grey[700],
-                  ),
+                Builder(
+                  builder: (context) {
+                    String message = currentRecipe.transcriptError.userMessage;
+                    if (currentRecipe.transcriptError == TranscriptFetchError.unsupportedLanguage) {
+                      final langName = Recipe.getLanguageName(currentRecipe.category);
+                      message = "This video's transcript is in \. Only English is supported right now.";
+                    }
+                    return Text(
+                      currentRecipe.importStatus == "No transcript found"
+                          ? message
+                          : "The AI encountered an error while processing this recipe: \",
+                      style: GoogleFonts.manrope(
+                        fontSize: 16,
+                        height: 1.5,
+                        color: Colors.grey[700],
+                      ),
+                    );
+                  },
                 ),
               const SizedBox(height: 60),
               Center(
@@ -230,3 +239,4 @@ class RecipeErrorScreen extends ConsumerWidget {
     );
   }
 }
+

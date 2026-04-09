@@ -88,6 +88,24 @@ class GeminiService {
     }
   }
 
+  Future<String?> detectLanguage(String text) async {
+    final String modelName = await discoverLatestModel();
+    final model = _mockModel ?? GenerativeModel(
+      model: modelName,
+      apiKey: apiKey,
+    );
+
+    final prompt = "Detect the language of the following text. Reply with only the ISO 639-1 language code (e.g. 'en', 'hi', 'ta'). Text: \";
+
+    try {
+      final response = await model.generateContent([Content.text(prompt)]);
+      return response.text?.trim().toLowerCase();
+    } catch (e) {
+      debugPrint("Language Detection Error: \");
+      return null;
+    }
+  }
+
   Future<Recipe?> extractRecipeFromContent({
     required String title,
     required String channel,
@@ -143,3 +161,4 @@ No preamble, no commentary.
     return null;
   }
 }
+

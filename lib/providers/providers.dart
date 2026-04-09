@@ -330,6 +330,46 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
       return;
     }
 
+    final transcript = recipe.transcript;
+    if (transcript == null || transcript.isEmpty) {
+      await updateRecipe(recipe.copyWith(importStatus: "Failed: No source text"));
+      return;
+    }
+
+    await updateRecipe(recipe.copyWith(importStatus: "Analyzing Language..."));
+    final gemini = GeminiService(apiKey: apiKey);
+    
+    // 1. Detect Language
+    final langCode = await gemini.detectLanguage(transcript);
+    if (langCode != null && langCode != 'en') {
+      await updateRecipe(recipe.copyWith(
+        importStatus: "No transcript found",
+        transcriptError: TranscriptFetchError.unsupportedLanguage,
+        category: langCode, // Store lang code temporarily in category for UI mapping
+      ));
+      return;
+    }
+
+    await updateRecipe(recipe.copyWith(importStatus: "AI Processing..."));
+    final result = await gemini.extractRecipeFromContent(
+      title: recipe.youtubeTitle ?? recipe.dishName,
+      channel: recipe.youtubeChannel ?? "Unknown",
+      url: recipe.youtubeUrl!,
+      thumbnail: recipe.thumbnailUrl,
+      transcript: transcript,
+    );
+
+    if (result != null) {
+      await updateRecipe(result.copyWith(
+        id: recipe.id,
+        importStatus: "Completed",
+      ));
+    } else {
+      await updateRecipe(recipe.copyWith(importStatus: "Failed: Gemini"));
+      throw "Gemini extraction failed";
+    }
+  }
+
     await updateRecipe(recipe.copyWith(importStatus: "AI Processing..."));
     final gemini = GeminiService(apiKey: apiKey);
     final result = await gemini.extractRecipeFromContent(
@@ -351,3 +391,4 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
     }
   }
 }
+

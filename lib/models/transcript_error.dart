@@ -4,6 +4,7 @@ enum TranscriptFetchError {
   isShort,
   notAccessible,
   noEnglishTranscript,
+  unsupportedLanguage,
   unknownError;
 
   String get userMessage {
@@ -15,7 +16,9 @@ enum TranscriptFetchError {
       case TranscriptFetchError.notAccessible:
         return "This video isn't publicly accessible.";
       case TranscriptFetchError.noEnglishTranscript:
-        return "Only non-English transcripts were found. English-only is supported right now.";
+        return "Only English transcripts are supported right now. Try a video with English captions.";
+      case TranscriptFetchError.unsupportedLanguage:
+        return "Unsupported Language"; // Handled dynamically in UI
       case TranscriptFetchError.unknownError:
         return "Couldn't fetch the transcript. Try again or paste it manually.";
       case TranscriptFetchError.none:
