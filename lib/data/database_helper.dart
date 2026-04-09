@@ -21,7 +21,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 6, // Increment version for V2 fields
+      version: 7, 
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -47,7 +47,8 @@ class DatabaseHelper {
         import_status TEXT,
         flavor_profile TEXT,
         rating REAL,
-        notes TEXT
+        notes TEXT,
+        transcript_error TEXT
       )
     ''');
   }
@@ -72,6 +73,9 @@ class DatabaseHelper {
       try { await db.execute('ALTER TABLE recipes ADD COLUMN flavor_profile TEXT'); } catch(e) {}
       try { await db.execute('ALTER TABLE recipes ADD COLUMN rating REAL'); } catch(e) {}
       try { await db.execute('ALTER TABLE recipes ADD COLUMN notes TEXT'); } catch(e) {}
+    }
+    if (oldVersion < 7) {
+      try { await db.execute('ALTER TABLE recipes ADD COLUMN transcript_error TEXT'); } catch(e) {}
     }
   }
 

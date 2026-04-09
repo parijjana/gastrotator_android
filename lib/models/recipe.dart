@@ -1,3 +1,5 @@
+import 'transcript_error.dart';
+
 class Recipe {
   final int? id;
   final String dishName;
@@ -14,11 +16,13 @@ class Recipe {
   final String? cookingTime;
   final String? transcript;
   final String? importStatus;
-  final String? flavorProfile; // New for V2-05
-  final double? rating;        // New for V2-06
-  final String? notes;         // New for V2-06/V2-09
+  final String? flavorProfile; 
+  final double? rating;        
+  final String? notes;
+  final TranscriptFetchError transcriptError;
 
   Recipe({
+    this.transcriptError = TranscriptFetchError.none,
     this.id,
     required this.dishName,
     required this.category,
@@ -59,6 +63,7 @@ class Recipe {
       'flavor_profile': flavorProfile,
       'rating': rating,
       'notes': notes,
+      'transcript_error': transcriptError.name,
     };
   }
 
@@ -82,6 +87,10 @@ class Recipe {
       flavorProfile: map['flavor_profile'],
       rating: map['rating']?.toDouble(),
       notes: map['notes'],
+      transcriptError: TranscriptFetchError.values.firstWhere(
+        (e) => e.name == (map['transcript_error'] ?? 'none'),
+        orElse: () => TranscriptFetchError.none,
+      ),
     );
   }
 
@@ -104,6 +113,7 @@ class Recipe {
     String? flavorProfile,
     double? rating,
     String? notes,
+    TranscriptFetchError? transcriptError,
   }) {
     return Recipe(
       id: id ?? this.id,
@@ -124,6 +134,7 @@ class Recipe {
       flavorProfile: flavorProfile ?? this.flavorProfile,
       rating: rating ?? this.rating,
       notes: notes ?? this.notes,
+      transcriptError: transcriptError ?? this.transcriptError,
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/recipe.dart';
+import '../models/transcript_error.dart';
 import '../providers/providers.dart';
 
 class RecipeErrorScreen extends ConsumerWidget {
@@ -15,8 +16,8 @@ class RecipeErrorScreen extends ConsumerWidget {
     final allRecipes = ref.watch(recipesProvider);
     // Find the latest version of this recipe from the provider
     final currentRecipe = allRecipes.firstWhere((r) => r.id == recipe.id, orElse: () => recipe);
-    final isProcessing = currentRecipe.importStatus != "No transcript found" && 
-                         currentRecipe.importStatus != "Completed" && 
+    final isProcessing = currentRecipe.importStatus != "No transcript found" &&
+                         currentRecipe.importStatus != "Completed" &&
                          currentRecipe.importStatus?.contains("Failed") != true;
 
     return Scaffold(
@@ -64,8 +65,8 @@ class RecipeErrorScreen extends ConsumerWidget {
               ] else
                 Text(
                   currentRecipe.importStatus == "No transcript found"
-                      ? "No transcript found for this video. The AI was unable to extract the full details automatically."
-                      : "The AI encountered an error while processing this recipe: ${currentRecipe.importStatus}",
+                      ? currentRecipe.transcriptError.userMessage
+                      : "The AI encountered an error while processing this recipe: \",
                   style: GoogleFonts.manrope(
                     fontSize: 16,
                     height: 1.5,
@@ -91,7 +92,10 @@ class RecipeErrorScreen extends ConsumerWidget {
                   child: ElevatedButton(
                     onPressed: () async {
                       // Reset status to trigger re-extraction
-                      final resetRecipe = currentRecipe.copyWith(importStatus: "Placeholder Created");
+                      final resetRecipe = currentRecipe.copyWith(
+                        importStatus: "Placeholder Created",
+                        transcriptError: TranscriptFetchError.none,
+                      );
                       await ref.read(recipesProvider.notifier).updateRecipe(resetRecipe);
                       await ref.read(recipesProvider.notifier).autoProcessRecipe(resetRecipe);
                     },
@@ -111,6 +115,24 @@ class RecipeErrorScreen extends ConsumerWidget {
                 SizedBox(
                   width: double.infinity,
                   height: 56,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showManualPasteDialog(context, ref, currentRecipe),
+                    icon: const Icon(Icons.paste),
+                    label: Text(
+                      "PASTE TRANSCRIPT MANUALLY",
+                      style: GoogleFonts.manrope(fontWeight: FontWeight.bold, letterSpacing: 1),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF944A00),
+                      side: const BorderSide(color: Color(0xFF944A00), width: 1.5),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
                   child: OutlinedButton(
                     onPressed: () async {
                       final confirmed = await showDialog<bool>(
@@ -121,8 +143,8 @@ class RecipeErrorScreen extends ConsumerWidget {
                           actions: [
                             TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
                             TextButton(
-                              onPressed: () => Navigator.pop(context, true), 
-                              child: const Text("Delete", style: const TextStyle(color: Colors.red))
+                              onPressed: () => Navigator.pop(context, true),
+                              child: const Text("Delete", style: TextStyle(color: Colors.red))
                             ),
                           ],
                         ),
@@ -171,6 +193,39 @@ class RecipeErrorScreen extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _showManualPasteDialog(BuildContext context, WidgetRef ref, Recipe recipe) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Paste Transcript"),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: TextField(
+            controller: controller,
+            maxLines: 10,
+            decoration: const InputDecoration(
+              hintText: "Paste the transcript here...",
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.isNotEmpty) {
+                ref.read(recipesProvider.notifier).updateManualTranscript(recipe, controller.text);
+                Navigator.pop(context);
+              }
+            },
+            child: const Text("Process"),
+          ),
+        ],
       ),
     );
   }

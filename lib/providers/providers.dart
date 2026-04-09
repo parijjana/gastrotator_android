@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../data/database_helper.dart';
 import '../models/recipe.dart';
+import '../models/transcript_error.dart';
 import '../services/youtube_service.dart';
 import '../services/gemini_service.dart';
 
@@ -43,7 +44,6 @@ class ThemeNotifier extends Notifier<ThemeSettings> {
 
   @override
   ThemeSettings build() {
-    // We return a default and then update once loaded
     _loadTheme();
     return ThemeSettings(
       primaryColor: const Color(0xFFFF8C00),
@@ -116,20 +116,6 @@ class ApiKeyNotifier extends Notifier<String?> {
   }
 }
 
-  Future<void> _loadKey() async {
-    final storage = ref.read(secureStorageProvider);
-    final key = await storage.read(key: _key);
-    if (!ref.mounted) return;
-    state = key;
-  }
-
-  Future<void> saveKey(String key) async {
-    final storage = ref.read(secureStorageProvider);
-    await storage.write(key: _key, value: key);
-    state = key;
-  }
-}
-
 // Recipes Provider
 final recipesProvider = NotifierProvider<RecipesNotifier, List<Recipe>>(() {
   return RecipesNotifier();
@@ -154,6 +140,16 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
       final addedRecipe = state.firstWhere((r) => r.id == id);
       autoProcessRecipe(addedRecipe);
     }
+  }
+
+  Future<void> updateManualTranscript(Recipe recipe, String transcript) async {
+    await updateRecipe(recipe.copyWith(
+      transcript: transcript,
+      importStatus: "Transcript Fetched",
+      transcriptError: TranscriptFetchError.none,
+    ));
+    final updated = state.firstWhere((r) => r.id == recipe.id);
+    autoProcessRecipe(updated);
   }
 
   Future<void> updateRecipe(Recipe recipe) async {
@@ -191,7 +187,6 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
       final existingRecipes = await DatabaseHelper.instance.getAllRecipes();
       final existingUrls = existingRecipes.map((r) => r.youtubeUrl).toSet();
 
-      int importedCount = 0;
       for (var item in list) {
         final String? url = item['youtubeUrl'];
         if (url != null && existingUrls.contains(url)) continue;
@@ -212,11 +207,10 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
           importStatus: "Completed",
         );
         await DatabaseHelper.instance.insert(recipe);
-        importedCount++;
       }
       await loadRecipes();
     } catch (e) {
-      throw "Invalid backup file: $e";
+      throw "Invalid backup file: ";
     }
   }
 
@@ -234,7 +228,7 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
         'dishName': 'Decentralized Dal',
         'category': 'Lunch',
         'ingredients': 'Red Lentils: 200g\nWater: 600ml\nGhee: 1 tbsp\nCumin: 1 tsp',
-        'recipe': '1. Boil lentils until soft.\n2. Temper with ghee and cumin.\n3. Serve hot with rice.',
+        'recipe': '1. Boil lentils until soft.\n2. Temper with ghee and cumin.\n3. Serve hot with rice.',       
         'totalCalories': 320.0,
         'caloriesPer100g': 110.0,
       }
@@ -245,7 +239,7 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
   Future<void> triggerMagicImport(String url) async {
     final timestamp = DateTime.now().toString().split('.').first;
     final placeholder = Recipe(
-      dishName: "AI Magic Import: $timestamp",
+      dishName: "AI Magic Import: ",
       category: "Pending",
       ingredients: "",
       recipe: "",
@@ -257,7 +251,7 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
   }
 
   Future<void> autoProcessRecipe(Recipe recipe) async {
-    if (recipe.importStatus == "Completed" || recipe.importStatus?.startsWith("Failed") == true) return;
+    if (recipe.importStatus == "Completed" || recipe.importStatus?.startsWith("Failed") == true) return;        
 
     try {
       if (recipe.importStatus == "Placeholder Created") {
@@ -279,7 +273,7 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
         return;
       }
     } catch (e) {
-      print("Auto-process error: $e");
+      debugPrint("Auto-process error: ");
       await updateRecipe(recipe.copyWith(importStatus: "Failed: Auto-process"));
     }
   }
@@ -308,19 +302,24 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
     await updateRecipe(recipe.copyWith(importStatus: "Fetching Transcript..."));
     final url = recipe.youtubeUrl!;
     final videoId = url.contains('v=') ? url.split('v=')[1].split('&')[0] : url.split('/').last;
+    final isShort = url.contains('/shorts/');
 
     final yt = YouTubeService();
-    final result = await yt.fetchTranscriptOnly(videoId);
+    final result = await yt.fetchTranscriptOnly(videoId, isShort: isShort);
     yt.close();
 
     if (result['success']) {
       await updateRecipe(recipe.copyWith(
         transcript: result['transcript'],
         importStatus: "Transcript Fetched",
+        transcriptError: TranscriptFetchError.none,
       ));
     } else {
-      await updateRecipe(recipe.copyWith(importStatus: "No transcript found"));
-      throw "Transcript fetch failed";
+      final errorType = result['errorType'] ?? TranscriptFetchError.unknownError;
+      await updateRecipe(recipe.copyWith(
+        importStatus: "No transcript found",
+        transcriptError: errorType,
+      ));
     }
   }
 
@@ -352,4 +351,3 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
     }
   }
 }
-
