@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/recipe.dart';
 import '../models/transcript_error.dart';
+import '../models/video_length.dart';
 import '../providers/providers.dart';
 
 class RecipeErrorScreen extends ConsumerWidget {
@@ -14,11 +15,13 @@ class RecipeErrorScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final allRecipes = ref.watch(recipesProvider);
-    // Find the latest version of this recipe from the provider
     final currentRecipe = allRecipes.firstWhere((r) => r.id == recipe.id, orElse: () => recipe);
+    
+    final isAwaitingLongConfirm = currentRecipe.importStatus == "Awaiting Confirmation (Long Video)";
     final isProcessing = currentRecipe.importStatus != "No transcript found" &&
                          currentRecipe.importStatus != "Completed" &&
-                         currentRecipe.importStatus?.contains("Failed") != true;
+                         currentRecipe.importStatus?.contains("Failed") != true &&
+                         !isAwaitingLongConfirm;
 
     return Scaffold(
       backgroundColor: const Color(0xFFFCF9F8),
@@ -62,7 +65,17 @@ class RecipeErrorScreen extends ConsumerWidget {
                     letterSpacing: 1,
                   ),
                 ),
-              ] else
+              ] else if (isAwaitingLongConfirm)
+                Text(
+                  "This video is over an hour long and may contain multiple recipes. Results may be incomplete. Continue anyway?",
+                  style: GoogleFonts.manrope(
+                    fontSize: 16,
+                    height: 1.5,
+                    color: Colors.black,
+                    fontWeight: FontWeight.bold,
+                  ),
+                )
+              else
                 Builder(
                   builder: (context) {
                     String message = currentRecipe.transcriptError.userMessage;
@@ -95,12 +108,27 @@ class RecipeErrorScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 60),
               if (!isProcessing) ...[
+                if (isAwaitingLongConfirm) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: ElevatedButton(
+                      onPressed: () => ref.read(recipesProvider.notifier).confirmLongVideoProcessing(currentRecipe),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green[700],
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                      ),
+                      child: Text("CONTINUE ANYWAY", style: GoogleFonts.manrope(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 SizedBox(
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
                     onPressed: () async {
-                      // Reset status to trigger re-extraction
                       final resetRecipe = currentRecipe.copyWith(
                         importStatus: "Placeholder Created",
                         transcriptError: TranscriptFetchError.none,
@@ -239,4 +267,3 @@ class RecipeErrorScreen extends ConsumerWidget {
     );
   }
 }
-

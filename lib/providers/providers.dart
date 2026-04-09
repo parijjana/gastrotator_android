@@ -323,12 +323,92 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
     }
   }
 
-  Future<void> _runGemini(Recipe recipe) async {
+    Future<void> _runGemini(Recipe recipe) async {
     final apiKey = ref.read(apiKeyProvider);
     if (apiKey == null || apiKey.isEmpty) {
       await updateRecipe(recipe.copyWith(importStatus: "Failed: Missing API Key"));
       return;
     }
+
+    final transcript = recipe.transcript;
+    if (transcript == null || transcript.isEmpty) {
+      await updateRecipe(recipe.copyWith(importStatus: "Failed: No source text"));
+      return;
+    }
+
+    await updateRecipe(recipe.copyWith(importStatus: "Analyzing Language..."));
+    final gemini = GeminiService(apiKey: apiKey);
+    
+    // 1. Detect Language
+    final langCode = await gemini.detectLanguage(transcript);
+    if (langCode != null && langCode != 'en') {
+      await updateRecipe(recipe.copyWith(
+        importStatus: "No transcript found",
+        transcriptError: TranscriptFetchError.unsupportedLanguage,
+        category: langCode,
+      ));
+      return;
+    }
+
+    // 2. Length Check & Processing Strategy
+    String finalInputText = transcript;
+    if (recipe.videoLength == VideoLength.long && recipe.importStatus != "Processing Confirmed") {
+      await updateRecipe(recipe.copyWith(importStatus: "Awaiting Confirmation (Long Video)"));
+      return;
+    }
+
+    if (recipe.videoLength == VideoLength.medium || (recipe.videoLength == VideoLength.long && recipe.importStatus == "Processing Confirmed")) {
+      await updateRecipe(recipe.copyWith(importStatus: "Summarizing Segments..."));
+      final segments = recipe.segments;
+      if (segments != null && segments.isNotEmpty) {
+        List<String> summaries = [];
+        String currentChunk = "";
+        double chunkStartTime = segments.first['start'] ?? 0.0;
+
+        for (var seg in segments) {
+          currentChunk += " \";
+          double currentTime = seg['start'] ?? 0.0;
+          
+          if (currentTime - chunkStartTime > 300) { // 5 min chunks
+            final summary = await gemini.summarizeSegment(currentChunk);
+            if (summary != null) summaries.add(summary);
+            currentChunk = "";
+            chunkStartTime = currentTime;
+          }
+        }
+        if (currentChunk.isNotEmpty) {
+          final summary = await gemini.summarizeSegment(currentChunk);
+          if (summary != null) summaries.add(summary);
+        }
+        finalInputText = summaries.join("\n\n---\n\n");
+      }
+    }
+
+    await updateRecipe(recipe.copyWith(importStatus: "AI Processing..."));
+    final result = await gemini.extractRecipeFromContent(
+      title: recipe.youtubeTitle ?? recipe.dishName,
+      channel: recipe.youtubeChannel ?? "Unknown",
+      url: recipe.youtubeUrl!,
+      thumbnail: recipe.thumbnailUrl,
+      transcript: finalInputText,
+    );
+
+    if (result != null) {
+      await updateRecipe(result.copyWith(
+        id: recipe.id,
+        importStatus: "Completed",
+      ));
+    } else {
+      await updateRecipe(recipe.copyWith(importStatus: "Failed: Gemini"));
+      throw "Gemini extraction failed";
+    }
+  }
+
+  Future<void> confirmLongVideoProcessing(Recipe recipe) async {
+    await updateRecipe(recipe.copyWith(importStatus: "Processing Confirmed"));
+    final updated = state.firstWhere((r) => r.id == recipe.id);
+    _runGemini(updated);
+  }
 
     final transcript = recipe.transcript;
     if (transcript == null || transcript.isEmpty) {
@@ -391,4 +471,5 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
     }
   }
 }
+
 

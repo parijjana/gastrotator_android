@@ -45,6 +45,24 @@ class GeminiService {
     return 'gemini-2.0-flash'; // Optimized fallback
   }
 
+    Future<String?> summarizeSegment(String text) async {
+    final String modelName = await discoverLatestModel();
+    final model = _mockModel ?? GenerativeModel(
+      model: modelName,
+      apiKey: apiKey,
+    );
+
+    final prompt = "This is a segment of a cooking video transcript. Summarize only the cooking-relevant content: ingredients mentioned, steps described, and any tips. Be concise. Text:\n\";
+
+    try {
+      final response = await model.generateContent([Content.text(prompt)]);
+      return response.text?.trim();
+    } catch (e) {
+      debugPrint("Summarization Error: \");
+      return null;
+    }
+  }
+
   Recipe? parseRecipe(String jsonText, String title, String channel, String url, String? thumbnail) {
     try {
       String cleanedJson = jsonText.trim();
@@ -161,4 +179,5 @@ No preamble, no commentary.
     return null;
   }
 }
+
 

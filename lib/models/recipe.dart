@@ -1,3 +1,4 @@
+import 'video_length.dart';
 import 'transcript_error.dart';
 
 class Recipe {
@@ -15,7 +16,7 @@ class Recipe {
   final double? totalWeightGrams;
   final String? cookingTime;
   final String? transcript;
-  final String? importStatus;
+  final String? importStatus;`n  final double? durationSeconds;`n  final List<Map<String, dynamic>>? segments;
   final String? flavorProfile; 
   final double? rating;        
   final String? notes;
@@ -37,7 +38,7 @@ class Recipe {
     this.totalWeightGrams,
     this.cookingTime,
     this.transcript,
-    this.importStatus,
+    this.importStatus,`n    this.durationSeconds,`n    this.segments,
     this.flavorProfile,
     this.rating,
     this.notes,
@@ -94,6 +95,13 @@ class Recipe {
     );
   }
 
+    VideoLength get videoLength {
+    final ds = durationSeconds ?? 0.0;
+    if (ds < 1200) return VideoLength.short;
+    if (ds < 3600) return VideoLength.medium;
+    return VideoLength.long;
+  }
+
   static String getLanguageName(String code) {
     final map = {
       'en': 'English',
@@ -132,7 +140,7 @@ class Recipe {
     double? totalWeightGrams,
     String? cookingTime,
     String? transcript,
-    String? importStatus,
+    String? importStatus,`n    double? durationSeconds,`n    List<Map<String, dynamic>>? segments,
     String? flavorProfile,
     double? rating,
     String? notes,
@@ -153,7 +161,7 @@ class Recipe {
       totalWeightGrams: totalWeightGrams ?? this.totalWeightGrams,
       cookingTime: cookingTime ?? this.cookingTime,
       transcript: transcript ?? this.transcript,
-      importStatus: importStatus ?? this.importStatus,
+      importStatus: importStatus ?? this.importStatus,`n      durationSeconds: durationSeconds ?? this.durationSeconds,`n      segments: segments ?? this.segments,`n    this.durationSeconds,`n    this.segments,
       flavorProfile: flavorProfile ?? this.flavorProfile,
       rating: rating ?? this.rating,
       notes: notes ?? this.notes,
@@ -161,4 +169,5 @@ class Recipe {
     );
   }
 }
+
 
