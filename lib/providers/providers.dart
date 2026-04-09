@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../data/database_helper.dart';
 import '../models/recipe.dart';
 import '../models/transcript_error.dart';
+import '../models/video_length.dart';
 import '../services/youtube_service.dart';
 import '../services/gemini_service.dart';
 
@@ -210,7 +211,7 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
       }
       await loadRecipes();
     } catch (e) {
-      throw "Invalid backup file: ";
+      throw "Invalid backup file: \";
     }
   }
 
@@ -239,7 +240,7 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
   Future<void> triggerMagicImport(String url) async {
     final timestamp = DateTime.now().toString().split('.').first;
     final placeholder = Recipe(
-      dishName: "AI Magic Import: ",
+      dishName: "AI Magic Import: \",
       category: "Pending",
       ingredients: "",
       recipe: "",
@@ -273,7 +274,7 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
         return;
       }
     } catch (e) {
-      debugPrint("Auto-process error: ");
+      debugPrint("Auto-process error: \");
       await updateRecipe(recipe.copyWith(importStatus: "Failed: Auto-process"));
     }
   }
@@ -311,6 +312,8 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
     if (result['success']) {
       await updateRecipe(recipe.copyWith(
         transcript: result['transcript'],
+        durationSeconds: (result['durationSeconds'] as num?)?.toDouble(),
+        segments: result['segments'] != null ? List<Map<String, dynamic>>.from(result['segments']) : null,
         importStatus: "Transcript Fetched",
         transcriptError: TranscriptFetchError.none,
       ));
@@ -323,7 +326,7 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
     }
   }
 
-    Future<void> _runGemini(Recipe recipe) async {
+  Future<void> _runGemini(Recipe recipe) async {
     final apiKey = ref.read(apiKeyProvider);
     if (apiKey == null || apiKey.isEmpty) {
       await updateRecipe(recipe.copyWith(importStatus: "Failed: Missing API Key"));
@@ -409,67 +412,4 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
     final updated = state.firstWhere((r) => r.id == recipe.id);
     _runGemini(updated);
   }
-
-    final transcript = recipe.transcript;
-    if (transcript == null || transcript.isEmpty) {
-      await updateRecipe(recipe.copyWith(importStatus: "Failed: No source text"));
-      return;
-    }
-
-    await updateRecipe(recipe.copyWith(importStatus: "Analyzing Language..."));
-    final gemini = GeminiService(apiKey: apiKey);
-    
-    // 1. Detect Language
-    final langCode = await gemini.detectLanguage(transcript);
-    if (langCode != null && langCode != 'en') {
-      await updateRecipe(recipe.copyWith(
-        importStatus: "No transcript found",
-        transcriptError: TranscriptFetchError.unsupportedLanguage,
-        category: langCode, // Store lang code temporarily in category for UI mapping
-      ));
-      return;
-    }
-
-    await updateRecipe(recipe.copyWith(importStatus: "AI Processing..."));
-    final result = await gemini.extractRecipeFromContent(
-      title: recipe.youtubeTitle ?? recipe.dishName,
-      channel: recipe.youtubeChannel ?? "Unknown",
-      url: recipe.youtubeUrl!,
-      thumbnail: recipe.thumbnailUrl,
-      transcript: transcript,
-    );
-
-    if (result != null) {
-      await updateRecipe(result.copyWith(
-        id: recipe.id,
-        importStatus: "Completed",
-      ));
-    } else {
-      await updateRecipe(recipe.copyWith(importStatus: "Failed: Gemini"));
-      throw "Gemini extraction failed";
-    }
-  }
-
-    await updateRecipe(recipe.copyWith(importStatus: "AI Processing..."));
-    final gemini = GeminiService(apiKey: apiKey);
-    final result = await gemini.extractRecipeFromContent(
-      title: recipe.youtubeTitle ?? recipe.dishName,
-      channel: recipe.youtubeChannel ?? "Unknown",
-      url: recipe.youtubeUrl!,
-      thumbnail: recipe.thumbnailUrl,
-      transcript: recipe.transcript,
-    );
-
-    if (result != null) {
-      await updateRecipe(result.copyWith(
-        id: recipe.id,
-        importStatus: "Completed",
-      ));
-    } else {
-      await updateRecipe(recipe.copyWith(importStatus: "Failed: Gemini"));
-      throw "Gemini extraction failed";
-    }
-  }
 }
-
-
