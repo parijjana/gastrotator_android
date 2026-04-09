@@ -99,7 +99,7 @@ class _ImportRecipeScreenState extends ConsumerState<ImportRecipeScreen> {
     
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Magic extraction started! Check Home.')),
+        const SnackBar(content: Text('AI Magic extraction started! Check Home.')),
       );
       Navigator.pop(context);
     }
@@ -121,7 +121,7 @@ class _ImportRecipeScreenState extends ConsumerState<ImportRecipeScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Gemini Key Missing"),
-        content: const Text("Magic Import requires a Gemini API Key. Would you like to set it up now?"),
+        content: const Text("AI Magic Import requires a Gemini API Key. Would you like to set it up now?"),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Later")),
           ElevatedButton(

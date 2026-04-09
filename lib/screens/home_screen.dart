@@ -86,7 +86,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Magic extraction started!')),
+        const SnackBar(content: Text('AI Magic extraction started!')),
       );
     }
   }
@@ -107,7 +107,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Gemini Key Missing"),
-        content: const Text("Magic Import requires a Gemini API Key. Would you like to set it up now?"),
+        content: const Text("AI Magic Import requires a Gemini API Key. Would you like to set it up now?"),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Later")),
           ElevatedButton(
@@ -372,7 +372,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Navigator.pushNamed(context, '/import');
         },
         icon: const Icon(Icons.auto_awesome),
-        label: const Text('AI Magic Import'),
+        label: const Text('AI AI Magic Import'),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
       ),

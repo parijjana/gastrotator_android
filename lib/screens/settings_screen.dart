@@ -25,6 +25,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (currentKey != null) {
       _apiKeyController.text = currentKey;
     }
+    _apiKeyController.addListener(() {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -49,11 +52,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export failed: $e')));
-      }
-    } finally {
+      } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
-  }
 
   Future<void> _importCollection() async {
     setState(() => _isProcessing = true);
@@ -70,15 +71,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Collection imported successfully!')));
         }
-      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Import failed: $e')));
-      }
-    } finally {
+      } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -124,7 +122,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              TextField(
+                            TextField(
                 controller: _apiKeyController,
                 obscureText: true,
                 decoration: InputDecoration(
@@ -132,14 +130,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   filled: true,
                   fillColor: Colors.white,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.save),
-                    onPressed: () {
-                      ref.read(apiKeyProvider.notifier).saveKey(_apiKeyController.text);
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('API Key saved securely.')));
-                    },
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_apiKeyController.text.isNotEmpty)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          onPressed: () {
+                            ref.read(apiKeyProvider.notifier).deleteKey();
+                            _apiKeyController.clear();
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('API Key removed.')));
+                          },
+                        ),
+                      IconButton(
+                        icon: const Icon(Icons.save),
+                        onPressed: () {
+                          ref.read(apiKeyProvider.notifier).saveKey(_apiKeyController.text);
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('API Key saved securely.')));
+                        },
+                      ),
+                    ],
                   ),
                 ),
+              ),
               ),
               const SizedBox(height: 40),
               _buildSectionTitle(context, "Backup & Restore"),
@@ -208,4 +221,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }).toList(),
     );
   }
-}
+
+
+

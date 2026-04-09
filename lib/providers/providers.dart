@@ -108,6 +108,26 @@ class ApiKeyNotifier extends Notifier<String?> {
     await storage.write(key: _key, value: key);
     state = key;
   }
+
+  Future<void> deleteKey() async {
+    final storage = ref.read(secureStorageProvider);
+    await storage.delete(key: _key);
+    state = null;
+  }
+}
+
+  Future<void> _loadKey() async {
+    final storage = ref.read(secureStorageProvider);
+    final key = await storage.read(key: _key);
+    if (!ref.mounted) return;
+    state = key;
+  }
+
+  Future<void> saveKey(String key) async {
+    final storage = ref.read(secureStorageProvider);
+    await storage.write(key: _key, value: key);
+    state = key;
+  }
 }
 
 // Recipes Provider
@@ -225,7 +245,7 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
   Future<void> triggerMagicImport(String url) async {
     final timestamp = DateTime.now().toString().split('.').first;
     final placeholder = Recipe(
-      dishName: "Magic Import: $timestamp",
+      dishName: "AI Magic Import: $timestamp",
       category: "Pending",
       ingredients: "",
       recipe: "",
@@ -332,3 +352,4 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
     }
   }
 }
+

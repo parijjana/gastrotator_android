@@ -9,7 +9,7 @@ The Home Screen is your "Kitchen." It displays all recipes stored locally on you
 * **Magic Button:** Tap the (+) button to enter the Import Screen.
 * **Safety:** Long-press a recipe if you wish to remove it from your database.
 
-## [IMPORT] IMPORTING RECIPES (MAGIC IMPORT)
+## [IMPORT] IMPORTING RECIPES (AI Magic Import)
 GastRotator uses advanced AI to "read" cooking videos.
 * **YouTube URL:** Copy a URL from the YouTube app and paste it here.
 * **Magic Wand Icon:** Tap this to begin the extraction. The app will fetch the transcript and use Gemini AI to organize it.

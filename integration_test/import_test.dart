@@ -25,7 +25,7 @@ void main() {
       await tester.enterText(urlField, 'https://www.youtube.com/watch?v=3iNyUwPKrXQ');
       await tester.pumpAndSettle();
 
-      // 4. Tap Magic Import (now add_circle icon)
+      // 4. Tap AI Magic Import (now add_circle icon)
       final importButton = find.byIcon(Icons.add_circle);
       await tester.tap(importButton);
       await tester.pumpAndSettle(); // Navigate back to home

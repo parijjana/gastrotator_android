@@ -38,7 +38,7 @@ GastRotator is a local-first, privacy-centric Android application built with Flu
 
 ## ??? Setup & Usage
 
-1. **Gemini API Key:** To enable "Magic Import," you must provide your own API key. You can get a free one from [Google AI Studio](https://aistudio.google.com/).
+1. **Gemini API Key:** To enable "AI Magic Import," you must provide your own API key. You can get a free one from [Google AI Studio](https://aistudio.google.com/).
 2. **Importing:** Use the Android **Share** button on any YouTube video and select "GastRotator" to begin extraction.
 3. **Privacy:** This app has **Zero Backend**. No data is collected, tracked, or sold.
 
@@ -46,7 +46,7 @@ GastRotator is a local-first, privacy-centric Android application built with Flu
 
 ## ?? Privacy Policy
 The official privacy policy can be viewed at:  
-[https://parijjana.github.io/gastrotator_android/](https://parijjana.github.io/gastrotator_android/)
+[https://github.com/parijjana/gastrotator_android/blob/main/docs/privacy_policy.html](https://github.com/parijjana/gastrotator_android/blob/main/docs/privacy_policy.html)
 
 ---
 *Stay hungry, stay kinetic.*  
