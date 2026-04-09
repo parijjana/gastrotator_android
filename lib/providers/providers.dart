@@ -1,0 +1,334 @@
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../data/database_helper.dart';
+import '../models/recipe.dart';
+import '../services/youtube_service.dart';
+import '../services/gemini_service.dart';
+
+// Secure Storage Provider
+final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
+  return const FlutterSecureStorage(
+    aOptions: AndroidOptions(
+      encryptedSharedPreferences: true,
+    ),
+  );
+});
+
+// Theme Settings
+class ThemeSettings {
+  final Color primaryColor;
+  final Brightness brightness;
+
+  ThemeSettings({
+    required this.primaryColor,
+    required this.brightness,
+  });
+
+  ThemeSettings copyWith({
+    Color? primaryColor,
+    Brightness? brightness,
+  }) {
+    return ThemeSettings(
+      primaryColor: primaryColor ?? this.primaryColor,
+      brightness: brightness ?? this.brightness,
+    );
+  }
+}
+
+class ThemeNotifier extends Notifier<ThemeSettings> {
+  static const _primaryKey = 'theme_primary';
+  static const _darkKey = 'theme_dark';
+
+  @override
+  ThemeSettings build() {
+    // We return a default and then update once loaded
+    _loadTheme();
+    return ThemeSettings(
+      primaryColor: const Color(0xFFFF8C00),
+      brightness: Brightness.light,
+    );
+  }
+
+  Future<void> _loadTheme() async {
+    final storage = ref.read(secureStorageProvider);
+    final primary = await storage.read(key: _primaryKey);
+    final dark = await storage.read(key: _darkKey);
+
+    if (!ref.mounted) return;
+
+    if (primary != null || dark != null) {
+      state = ThemeSettings(
+        primaryColor: primary != null ? Color(int.parse(primary)) : state.primaryColor,
+        brightness: dark == 'true' ? Brightness.dark : Brightness.light,
+      );
+    }
+  }
+
+  Future<void> setPrimaryColor(Color color) async {
+    state = state.copyWith(primaryColor: color);
+    await ref.read(secureStorageProvider).write(key: _primaryKey, value: color.value.toString());
+  }
+
+  Future<void> toggleBrightness() async {
+    final newBrightness = state.brightness == Brightness.light ? Brightness.dark : Brightness.light;
+    state = state.copyWith(brightness: newBrightness);
+    await ref.read(secureStorageProvider).write(key: _darkKey, value: (newBrightness == Brightness.dark).toString());
+  }
+}
+
+final themeProvider = NotifierProvider<ThemeNotifier, ThemeSettings>(() {
+  return ThemeNotifier();
+});
+
+// API Key Provider
+final apiKeyProvider = NotifierProvider<ApiKeyNotifier, String?>(() {
+  return ApiKeyNotifier();
+});
+
+class ApiKeyNotifier extends Notifier<String?> {
+  static const _key = 'gemini_api_key';
+
+  @override
+  String? build() {
+    _loadKey();
+    return null;
+  }
+
+  Future<void> _loadKey() async {
+    final storage = ref.read(secureStorageProvider);
+    final key = await storage.read(key: _key);
+    if (!ref.mounted) return;
+    state = key;
+  }
+
+  Future<void> saveKey(String key) async {
+    final storage = ref.read(secureStorageProvider);
+    await storage.write(key: _key, value: key);
+    state = key;
+  }
+}
+
+// Recipes Provider
+final recipesProvider = NotifierProvider<RecipesNotifier, List<Recipe>>(() {
+  return RecipesNotifier();
+});
+
+class RecipesNotifier extends Notifier<List<Recipe>> {
+  @override
+  List<Recipe> build() {
+    loadRecipes();
+    return [];
+  }
+
+  Future<void> loadRecipes() async {
+    final recipes = await DatabaseHelper.instance.getAllRecipes();
+    state = recipes;
+  }
+
+  Future<void> addRecipe(Recipe recipe) async {
+    final id = await DatabaseHelper.instance.insert(recipe);
+    await loadRecipes();
+    if (recipe.importStatus == "Placeholder Created") {
+      final addedRecipe = state.firstWhere((r) => r.id == id);
+      autoProcessRecipe(addedRecipe);
+    }
+  }
+
+  Future<void> updateRecipe(Recipe recipe) async {
+    await DatabaseHelper.instance.update(recipe);
+    await loadRecipes();
+  }
+
+  Future<void> deleteRecipe(int id) async {
+    await DatabaseHelper.instance.delete(id);
+    await loadRecipes();
+  }
+
+  Future<String> exportRecipes() async {
+    final recipes = await DatabaseHelper.instance.getAllRecipes();
+    final list = recipes.map((r) => {
+      'dishName': r.dishName,
+      'category': r.category,
+      'ingredients': r.ingredients,
+      'recipe': r.recipe,
+      'youtubeUrl': r.youtubeUrl,
+      'youtubeTitle': r.youtubeTitle,
+      'youtubeChannel': r.youtubeChannel,
+      'thumbnailUrl': r.thumbnailUrl,
+      'totalCalories': r.totalCalories,
+      'caloriesPer100g': r.caloriesPer100g,
+      'totalWeightGrams': r.totalWeightGrams,
+      'cookingTime': r.cookingTime,
+    }).toList();
+    return jsonEncode(list);
+  }
+
+  Future<void> importRecipes(String jsonData) async {
+    try {
+      final List<dynamic> list = jsonDecode(jsonData);
+      final existingRecipes = await DatabaseHelper.instance.getAllRecipes();
+      final existingUrls = existingRecipes.map((r) => r.youtubeUrl).toSet();
+
+      int importedCount = 0;
+      for (var item in list) {
+        final String? url = item['youtubeUrl'];
+        if (url != null && existingUrls.contains(url)) continue;
+
+        final recipe = Recipe(
+          dishName: item['dishName'] ?? "Imported Recipe",
+          category: item['category'] ?? "General",
+          ingredients: item['ingredients'] ?? "",
+          recipe: item['recipe'] ?? "",
+          youtubeUrl: url,
+          youtubeTitle: item['youtubeTitle'],
+          youtubeChannel: item['youtubeChannel'],
+          thumbnailUrl: item['thumbnailUrl'],
+          totalCalories: (item['totalCalories'] as num?)?.toDouble(),
+          caloriesPer100g: (item['caloriesPer100g'] as num?)?.toDouble(),
+          totalWeightGrams: (item['totalWeightGrams'] as num?)?.toDouble(),
+          cookingTime: item['cookingTime'],
+          importStatus: "Completed",
+        );
+        await DatabaseHelper.instance.insert(recipe);
+        importedCount++;
+      }
+      await loadRecipes();
+    } catch (e) {
+      throw "Invalid backup file: $e";
+    }
+  }
+
+  Future<void> loadSamples() async {
+    const samples = [
+      {
+        'dishName': 'Classic Bengali Aloo Bhaja',
+        'category': 'Breakfast',
+        'ingredients': 'Potatoes: 500g\nTurmeric: 1 tsp\nSalt: to taste\nMustard Oil: 3 tbsp',
+        'recipe': '1. Cut potatoes into thin matchsticks.\n2. Heat oil in a pan.\n3. Fry until crispy and golden.',
+        'totalCalories': 450.0,
+        'caloriesPer100g': 90.0,
+      },
+      {
+        'dishName': 'Decentralized Dal',
+        'category': 'Lunch',
+        'ingredients': 'Red Lentils: 200g\nWater: 600ml\nGhee: 1 tbsp\nCumin: 1 tsp',
+        'recipe': '1. Boil lentils until soft.\n2. Temper with ghee and cumin.\n3. Serve hot with rice.',
+        'totalCalories': 320.0,
+        'caloriesPer100g': 110.0,
+      }
+    ];
+    await importRecipes(jsonEncode(samples));
+  }
+
+  Future<void> triggerMagicImport(String url) async {
+    final timestamp = DateTime.now().toString().split('.').first;
+    final placeholder = Recipe(
+      dishName: "Magic Import: $timestamp",
+      category: "Pending",
+      ingredients: "",
+      recipe: "",
+      youtubeUrl: url,
+      importStatus: "Placeholder Created",
+    );
+
+    await addRecipe(placeholder);
+  }
+
+  Future<void> autoProcessRecipe(Recipe recipe) async {
+    if (recipe.importStatus == "Completed" || recipe.importStatus?.startsWith("Failed") == true) return;
+
+    try {
+      if (recipe.importStatus == "Placeholder Created") {
+        await _fetchMetadata(recipe);
+        final updated = state.firstWhere((r) => r.id == recipe.id);
+        await autoProcessRecipe(updated);
+        return;
+      }
+
+      if (recipe.importStatus == "Metadata Fetched") {
+        await _fetchTranscript(recipe);
+        final updated = state.firstWhere((r) => r.id == recipe.id);
+        await autoProcessRecipe(updated);
+        return;
+      }
+
+      if (recipe.importStatus == "Transcript Fetched") {
+        await _runGemini(recipe);
+        return;
+      }
+    } catch (e) {
+      print("Auto-process error: $e");
+      await updateRecipe(recipe.copyWith(importStatus: "Failed: Auto-process"));
+    }
+  }
+
+  Future<void> _fetchMetadata(Recipe recipe) async {
+    await updateRecipe(recipe.copyWith(importStatus: "Fetching Metadata..."));
+    final yt = YouTubeService();
+    final result = await yt.fetchVideoMetadataOnly(recipe.youtubeUrl!);
+    yt.close();
+
+    if (result['success']) {
+      await updateRecipe(recipe.copyWith(
+        dishName: result['title'],
+        youtubeTitle: result['title'],
+        youtubeChannel: result['channel'],
+        thumbnailUrl: result['thumbnail'],
+        importStatus: "Metadata Fetched",
+      ));
+    } else {
+      await updateRecipe(recipe.copyWith(importStatus: "Failed: Metadata"));
+      throw "Metadata fetch failed";
+    }
+  }
+
+  Future<void> _fetchTranscript(Recipe recipe) async {
+    await updateRecipe(recipe.copyWith(importStatus: "Fetching Transcript..."));
+    final url = recipe.youtubeUrl!;
+    final videoId = url.contains('v=') ? url.split('v=')[1].split('&')[0] : url.split('/').last;
+
+    final yt = YouTubeService();
+    final result = await yt.fetchTranscriptOnly(videoId);
+    yt.close();
+
+    if (result['success']) {
+      await updateRecipe(recipe.copyWith(
+        transcript: result['transcript'],
+        importStatus: "Transcript Fetched",
+      ));
+    } else {
+      await updateRecipe(recipe.copyWith(importStatus: "No transcript found"));
+      throw "Transcript fetch failed";
+    }
+  }
+
+  Future<void> _runGemini(Recipe recipe) async {
+    final apiKey = ref.read(apiKeyProvider);
+    if (apiKey == null || apiKey.isEmpty) {
+      await updateRecipe(recipe.copyWith(importStatus: "Failed: Missing API Key"));
+      return;
+    }
+
+    await updateRecipe(recipe.copyWith(importStatus: "AI Processing..."));
+    final gemini = GeminiService(apiKey: apiKey);
+    final result = await gemini.extractRecipeFromContent(
+      title: recipe.youtubeTitle ?? recipe.dishName,
+      channel: recipe.youtubeChannel ?? "Unknown",
+      url: recipe.youtubeUrl!,
+      thumbnail: recipe.thumbnailUrl,
+      transcript: recipe.transcript,
+    );
+
+    if (result != null) {
+      await updateRecipe(result.copyWith(
+        id: recipe.id,
+        importStatus: "Completed",
+      ));
+    } else {
+      await updateRecipe(recipe.copyWith(importStatus: "Failed: Gemini"));
+      throw "Gemini extraction failed";
+    }
+  }
+}

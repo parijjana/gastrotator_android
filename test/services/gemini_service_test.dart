@@ -1,0 +1,44 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:android_app/services/gemini_service.dart';
+
+void main() {
+  late GeminiService geminiService;
+
+  setUp(() {
+    geminiService = GeminiService(apiKey: 'test_key');
+  });
+
+  group('GeminiService Parsing', () {
+    test('parseRecipe should handle raw JSON correctly', () {
+      const jsonText = '{"dish_name": "Butter Chicken", "category": "Dinner", "ingredients": "Chicken, Butter", "recipe": "Cook it."}';
+      final recipe = geminiService.parseRecipe(jsonText, 'Title', 'Channel', 'URL', 'thumb', {
+        'total_calories': 500,
+        'calories_per_100g': 150,
+        'total_weight_grams': 300,
+        'cooking_time': '45 mins',
+      });
+
+      expect(recipe, isNotNull);
+      expect(recipe!.dishName, 'Butter Chicken');
+      expect(recipe.totalCalories, 500);
+      expect(recipe.cookingTime, '45 mins');
+    });
+
+    test('parseRecipe should handle markdown blocks correctly', () {
+      const jsonText = '```json\n{"dish_name": "Salad", "category": "Lunch", "ingredients": "Lettuce", "recipe": "Mix it."}\n```';
+      final recipe = geminiService.parseRecipe(jsonText, 'Title', 'Channel', 'URL', 'thumb', {
+        'total_calories': 100,
+      });
+
+      expect(recipe, isNotNull);
+      expect(recipe!.dishName, 'Salad');
+    });
+
+    test('parseRecipe should return null on invalid JSON', () {
+      const jsonText = 'invalid json';
+      final recipe = geminiService.parseRecipe(jsonText, 'Title', 'Channel', 'URL', 'thumb', {});
+
+      expect(recipe, isNull);
+    });
+  });
+}
