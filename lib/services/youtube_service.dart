@@ -24,7 +24,7 @@ class YouTubeService {
     }
   }
 
-    Future<Map<String, dynamic>> fetchTranscriptOnly(String videoId, {bool isShort = false}) async {
+  Future<Map<String, dynamic>> fetchTranscriptOnly(String videoId, {bool isShort = false}) async {
     if (isShort) {
       return {
         'success': false,
@@ -66,7 +66,6 @@ class YouTubeService {
   }
 
   Map<String, dynamic> _processTranscript(dynamic data) {
-    // Assuming data is TranscriptResponse from youtube_transcript_api
     final snippets = data.snippets;
     if (snippets.isEmpty) {
       return {'success': false, 'errorType': TranscriptFetchError.noEnglishTranscript};
@@ -74,9 +73,8 @@ class YouTubeService {
 
     final fullText = snippets.map((s) => s.text).join(' ');
     
-    // Estimate duration in seconds
-    final start = snippets.first.start ?? 0.0;
-    final end = snippets.last.start ?? 0.0;
+    final start = (snippets.first.start as num?)?.toDouble() ?? 0.0;
+    final end = (snippets.last.start as num?)?.toDouble() ?? 0.0;
     final durationSeconds = end - start;
 
     return {
@@ -85,59 +83,10 @@ class YouTubeService {
       'durationSeconds': durationSeconds,
       'segments': snippets.map((s) => {
         'text': s.text,
-        'start': s.start,
-        'duration': s.duration,
+        'start': (s.start as num?)?.toDouble(),
+        'duration': (s.duration as num?)?.toDouble(),
       }).toList(),
     };
-  }) async {
-    if (isShort) {
-      return {
-        'success': false,
-        'errorType': TranscriptFetchError.isShort,
-      };
-    }
-
-    final transcriptApi = YouTubeTranscriptApi();
-    try {
-      // Try English first
-      final fetchedTranscript = await transcriptApi.fetch(videoId, languages: ['en']);
-      final transcriptText = fetchedTranscript.snippets.map((s) => s.text).join(' ');
-      return {
-        'success': true,
-        'transcript': transcriptText,
-      };
-    } catch (e) {
-      // Fallback to searching all transcripts
-      try {
-        final transcriptList = await transcriptApi.list(videoId);
-        final firstTranscript = transcriptList.findTranscript(['en']);
-        final data = await firstTranscript.fetch();
-        final transcriptText = data.snippets.map((s) => s.text).join(' ');
-        return {
-          'success': true,
-          'transcript': transcriptText,
-        };
-      } catch (e2) {
-        TranscriptFetchError errorType = TranscriptFetchError.unknownError;
-        String errStr = e2.toString().toLowerCase();
-
-        if (errStr.contains('disabled') || errStr.contains('not enabled')) {
-          errorType = TranscriptFetchError.transcriptsDisabled;
-        } else if (errStr.contains('private') || errStr.contains('accessible') || errStr.contains('age')) {
-          errorType = TranscriptFetchError.notAccessible;
-        } else if (errStr.contains('no transcript') || errStr.contains('not found')) {
-          errorType = TranscriptFetchError.noEnglishTranscript;
-        }
-
-        return {
-          'success': false,
-          'errorType': errorType,
-          'error': e2.toString(),
-        };
-      }
-    } finally {
-      transcriptApi.dispose();
-    }
   }
 
   Future<Map<String, dynamic>> fetchVideoDetailsAndTranscript(String url) async {
@@ -152,7 +101,9 @@ class YouTubeService {
         ...meta,
         'transcript': transcriptData['transcript'] ?? "",
         'transcript_success': transcriptData['success'] == true,
-        'transcript_error_type': transcriptData['errorType'],
+        'durationSeconds': transcriptData['durationSeconds'],
+        'segments': transcriptData['segments'],
+        'errorType': transcriptData['errorType'],
         'success': true,
       };
     } catch (e) {
@@ -167,4 +118,3 @@ class YouTubeService {
     _yt.close();
   }
 }
-

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import '../models/recipe.dart';
+import '../models/validation_result.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 
@@ -10,10 +11,9 @@ class GeminiService {
 
   GeminiService({required this.apiKey, GenerativeModel? mockModel}) : _mockModel = mockModel;
 
-  /// Dynamically identifies the latest stable Gemini Flash model available for the API key.
   Future<String> discoverLatestModel() async {
     try {
-      final url = Uri.parse("https://generativelanguage.googleapis.com/v1beta/models?key=\");
+      final url = Uri.parse("https://generativelanguage.googleapis.com/v1beta/models?key=$apiKey");
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -40,30 +40,30 @@ class GeminiService {
         }
       }
     } catch (e) {
-      debugPrint("Model discovery failed: \");
+      debugPrint("Model discovery failed: $e");
     }
-    return 'gemini-2.0-flash'; // Optimized fallback
+    return 'gemini-2.0-flash';
   }
 
-    Future<String?> summarizeSegment(String text) async {
+  Future<String?> detectLanguage(String text) async {
     final String modelName = await discoverLatestModel();
     final model = _mockModel ?? GenerativeModel(
       model: modelName,
       apiKey: apiKey,
     );
 
-    final prompt = "This is a segment of a cooking video transcript. Summarize only the cooking-relevant content: ingredients mentioned, steps described, and any tips. Be concise. Text:\n\";
+    final prompt = "Detect the language of the following text. Reply with only the ISO 639-1 language code (e.g. 'en', 'hi', 'ta'). Text: ${text.substring(0, text.length > 1000 ? 1000 : text.length)}";
 
     try {
       final response = await model.generateContent([Content.text(prompt)]);
-      return response.text?.trim();
+      return response.text?.trim().toLowerCase();
     } catch (e) {
-      debugPrint("Summarization Error: \");
+      debugPrint("Language Detection Error: $e");
       return null;
     }
   }
 
-    Future<Map<String, dynamic>> validateContent(String transcript) async {
+  Future<Map<String, dynamic>> validateContent(String transcript) async {
     if (transcript.split(' ').length < 200) {
       return {'result': ValidationResult.insufficientContent};
     }
@@ -86,14 +86,14 @@ class GeminiService {
     Return only valid JSON. No preamble, no markdown.
     
     Transcript:
-    \
+    $transcript
     """;
 
     try {
       final response = await model.generateContent([Content.text(prompt)]);
       if (response.text == null) return {'result': ValidationResult.lowConfidence};
       
-      final data = json.decode(response.text!.replaceAll('`json', '').replaceAll('`', '').trim());
+      final data = json.decode(response.text!.replaceAll('```json', '').replaceAll('```', '').trim());
       
       if (data['confidence'] == 'low') return {'result': ValidationResult.lowConfidence};
       if (data['is_cooking_content'] == false) return {'result': ValidationResult.wrongDomain, 'content_type': data['content_type']};
@@ -101,18 +101,36 @@ class GeminiService {
       
       return {'result': ValidationResult.valid};
     } catch (e) {
-      debugPrint("Validation Error: \");
+      debugPrint("Validation Error: $e");
       return {'result': ValidationResult.lowConfidence};
+    }
+  }
+
+  Future<String?> summarizeSegment(String text) async {
+    final String modelName = await discoverLatestModel();
+    final model = _mockModel ?? GenerativeModel(
+      model: modelName,
+      apiKey: apiKey,
+    );
+
+    final prompt = "This is a segment of a cooking video transcript. Summarize only the cooking-relevant content: ingredients mentioned, steps described, and any tips. Be concise. Text:\n$text";
+
+    try {
+      final response = await model.generateContent([Content.text(prompt)]);
+      return response.text?.trim();
+    } catch (e) {
+      debugPrint("Summarization Error: $e");
+      return null;
     }
   }
 
   Recipe? parseRecipe(String jsonText, String title, String channel, String url, String? thumbnail) {
     try {
       String cleanedJson = jsonText.trim();
-      if (cleanedJson.contains('`json')) {
-        cleanedJson = cleanedJson.split('`json').last.split('`').first.trim();
-      } else if (cleanedJson.contains('`')) {
-        cleanedJson = cleanedJson.split('`').last.split('`').first.trim();
+      if (cleanedJson.contains('```json')) {
+        cleanedJson = cleanedJson.split('```json').last.split('```').first.trim();
+      } else if (cleanedJson.contains('```')) {
+        cleanedJson = cleanedJson.split('```').last.split('```').first.trim();
       }
 
       final dynamic decoded = json.decode(cleanedJson);
@@ -144,25 +162,7 @@ class GeminiService {
         notes: data['tips_warnings']?.toString(),
       );
     } catch (e) {
-      debugPrint("Parsing Error: \");
-      return null;
-    }
-  }
-
-  Future<String?> detectLanguage(String text) async {
-    final String modelName = await discoverLatestModel();
-    final model = _mockModel ?? GenerativeModel(
-      model: modelName,
-      apiKey: apiKey,
-    );
-
-    final prompt = "Detect the language of the following text. Reply with only the ISO 639-1 language code (e.g. 'en', 'hi', 'ta'). Text: \";
-
-    try {
-      final response = await model.generateContent([Content.text(prompt)]);
-      return response.text?.trim().toLowerCase();
-    } catch (e) {
-      debugPrint("Language Detection Error: \");
+      debugPrint("Parsing Error: $e");
       return null;
     }
   }
@@ -183,10 +183,10 @@ class GeminiService {
       systemInstruction: Content.system("""
 You are a cooking assistant. You will receive a raw auto-generated YouTube transcript or video description. Perform the following two operations in order:
 
-STAGE 1 — CLEAN (internal, do not output):
-Fix punctuation, correct likely cooking-related transcription errors (e.g. misheard ingredient names and technique words), and resolve run-on sentences. Do not remove content or change meaning. Treat this stage as internal reasoning only — do not include the cleaned transcript in your response.
+STAGE 1 â€” CLEAN (internal, do not output):
+Fix punctuation, correct likely cooking-related transcription errors (e.g. misheard ingredient names and technique words), and resolve run-on sentences. Do not remove content or change meaning. Treat this stage as internal reasoning only â€” do not include the cleaned transcript in your response.
 
-STAGE 2 — EXTRACT (output this only):
+STAGE 2 â€” EXTRACT (output this only):
 From the cleaned transcript, extract a structured recipe plan including nutritional estimates and cooking time. 
 
 Return ONLY a raw JSON object with this exact structure:
@@ -207,8 +207,8 @@ No preamble, no commentary.
     );
 
     final String sourceText = (transcript != null && transcript.isNotEmpty)
-        ? "RAW TRANSCRIPT:\n\"
-        : "VIDEO DESCRIPTION:\n\";
+        ? "RAW TRANSCRIPT:\n$transcript"
+        : "VIDEO DESCRIPTION:\n$description";
 
     try {
       final response = await model.generateContent([Content.text(sourceText)]);
@@ -217,11 +217,8 @@ No preamble, no commentary.
         return parseRecipe(response.text!, title, channel, url, thumbnail);
       }
     } catch (e) {
-      debugPrint("Gemini Unified Extraction Error: \");
+      debugPrint("Gemini Unified Extraction Error: $e");
     }
     return null;
   }
 }
-
-
-

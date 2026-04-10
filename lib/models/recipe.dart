@@ -1,6 +1,6 @@
-import 'validation_result.dart';
-import 'video_length.dart';
 import 'transcript_error.dart';
+import 'video_length.dart';
+import 'validation_result.dart';
 
 class Recipe {
   final int? id;
@@ -17,15 +17,16 @@ class Recipe {
   final double? totalWeightGrams;
   final String? cookingTime;
   final String? transcript;
-  final String? importStatus;`n  final double? durationSeconds;`n  final List<Map<String, dynamic>>? segments;`n  final ValidationResult validationResult;
+  final String? importStatus;
   final String? flavorProfile; 
   final double? rating;        
   final String? notes;
   final TranscriptFetchError transcriptError;
+  final double? durationSeconds;
+  final List<Map<String, dynamic>>? segments;
+  final ValidationResult validationResult;
 
   Recipe({
-    this.validationResult = ValidationResult.valid,
-    this.transcriptError = TranscriptFetchError.none,
     this.id,
     required this.dishName,
     required this.category,
@@ -40,10 +41,14 @@ class Recipe {
     this.totalWeightGrams,
     this.cookingTime,
     this.transcript,
-    this.importStatus,`n    this.durationSeconds,`n    this.segments,
+    this.importStatus,
     this.flavorProfile,
     this.rating,
     this.notes,
+    this.transcriptError = TranscriptFetchError.none,
+    this.durationSeconds,
+    this.segments,
+    this.validationResult = ValidationResult.valid,
   });
 
   Map<String, dynamic> toMap() {
@@ -74,7 +79,7 @@ class Recipe {
   factory Recipe.fromMap(Map<String, dynamic> map) {
     return Recipe(
       id: map['id'],
-      dishName: map['dish_name'],
+      dishName: map['dish_name'] ?? 'Unknown Dish',
       category: map['category'] ?? 'Uncategorized',
       ingredients: map['ingredients'] ?? '',
       recipe: map['recipe'] ?? '',
@@ -82,24 +87,27 @@ class Recipe {
       youtubeTitle: map['youtube_title'],
       youtubeChannel: map['youtube_channel'],
       thumbnailUrl: map['thumbnail_url'],
-      totalCalories: map['total_calories']?.toDouble(),
-      caloriesPer100g: map['calories_per_100g']?.toDouble(),
-      totalWeightGrams: map['total_weight_grams']?.toDouble(),
+      totalCalories: (map['total_calories'] as num?)?.toDouble(),
+      caloriesPer100g: (map['calories_per_100g'] as num?)?.toDouble(),
+      totalWeightGrams: (map['total_weight_grams'] as num?)?.toDouble(),
       cookingTime: map['cooking_time'],
       transcript: map['transcript'],
       importStatus: map['import_status'],
       flavorProfile: map['flavor_profile'],
-      rating: map['rating']?.toDouble(),
+      rating: (map['rating'] as num?)?.toDouble(),
       notes: map['notes'],
-      validationResult: ValidationResult.values.firstWhere((e) => e.name == (map['validation_result'] ?? 'valid'), orElse: () => ValidationResult.valid),
       transcriptError: TranscriptFetchError.values.firstWhere(
         (e) => e.name == (map['transcript_error'] ?? 'none'),
         orElse: () => TranscriptFetchError.none,
       ),
+      validationResult: ValidationResult.values.firstWhere(
+        (e) => e.name == (map['validation_result'] ?? 'valid'),
+        orElse: () => ValidationResult.valid,
+      ),
     );
   }
 
-    VideoLength get videoLength {
+  VideoLength get videoLength {
     final ds = durationSeconds ?? 0.0;
     if (ds < 1200) return VideoLength.short;
     if (ds < 3600) return VideoLength.medium;
@@ -108,28 +116,15 @@ class Recipe {
 
   static String getLanguageName(String code) {
     final map = {
-      'en': 'English',
-      'hi': 'Hindi',
-      'bn': 'Bengali',
-      'ta': 'Tamil',
-      'te': 'Telugu',
-      'mr': 'Marathi',
-      'gu': 'Gujarati',
-      'kn': 'Kannada',
-      'ml': 'Malayalam',
-      'pa': 'Punjabi',
-      'es': 'Spanish',
-      'fr': 'French',
-      'de': 'German',
-      'it': 'Italian',
-      'ja': 'Japanese',
-      'ko': 'Korean',
-      'zh': 'Chinese',
+      'en': 'English', 'hi': 'Hindi', 'bn': 'Bengali', 'ta': 'Tamil',
+      'te': 'Telugu', 'mr': 'Marathi', 'gu': 'Gujarati', 'kn': 'Kannada',
+      'ml': 'Malayalam', 'pa': 'Punjabi', 'es': 'Spanish', 'fr': 'French',
+      'de': 'German', 'it': 'Italian', 'ja': 'Japanese', 'ko': 'Korean', 'zh': 'Chinese',
     };
     return map[code.toLowerCase()] ?? code.toUpperCase();
   }
 
-  Recipe copyWith({{
+  Recipe copyWith({
     int? id,
     String? dishName,
     String? category,
@@ -144,11 +139,14 @@ class Recipe {
     double? totalWeightGrams,
     String? cookingTime,
     String? transcript,
-    String? importStatus,`n    double? durationSeconds,`n    List<Map<String, dynamic>>? segments,
+    String? importStatus,
     String? flavorProfile,
     double? rating,
     String? notes,
-    TranscriptFetchError? transcriptError,`n    ValidationResult? validationResult,
+    TranscriptFetchError? transcriptError,
+    double? durationSeconds,
+    List<Map<String, dynamic>>? segments,
+    ValidationResult? validationResult,
   }) {
     return Recipe(
       id: id ?? this.id,
@@ -165,14 +163,14 @@ class Recipe {
       totalWeightGrams: totalWeightGrams ?? this.totalWeightGrams,
       cookingTime: cookingTime ?? this.cookingTime,
       transcript: transcript ?? this.transcript,
-      importStatus: importStatus ?? this.importStatus,`n      durationSeconds: durationSeconds ?? this.durationSeconds,`n      segments: segments ?? this.segments,`n    this.durationSeconds,`n    this.segments,
+      importStatus: importStatus ?? this.importStatus,
       flavorProfile: flavorProfile ?? this.flavorProfile,
       rating: rating ?? this.rating,
       notes: notes ?? this.notes,
-      transcriptError: transcriptError ?? this.transcriptError,`n      validationResult: validationResult ?? this.validationResult,
+      transcriptError: transcriptError ?? this.transcriptError,
+      durationSeconds: durationSeconds ?? this.durationSeconds,
+      segments: segments ?? this.segments,
+      validationResult: validationResult ?? this.validationResult,
     );
   }
 }
-
-
-

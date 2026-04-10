@@ -48,7 +48,8 @@ class DatabaseHelper {
         flavor_profile TEXT,
         rating REAL,
         notes TEXT,
-        transcript_error TEXT,`n        validation_result TEXT
+        transcript_error TEXT,
+        validation_result TEXT
       )
     ''');
   }
@@ -79,7 +80,6 @@ class DatabaseHelper {
     }
     if (oldVersion < 8) {
       try { await db.execute('ALTER TABLE recipes ADD COLUMN validation_result TEXT'); } catch(e) {}
-    } catch(e) {}
     }
   }
 
@@ -118,4 +118,3 @@ class DatabaseHelper {
     db.close();
   }
 }
-

@@ -10,7 +10,7 @@ enum ValidationResult {
       case ValidationResult.foodAdjacent:
         return "This looks like food content but may not contain a full recipe. Results may be incomplete.";
       case ValidationResult.wrongDomain:
-        return "This doesn't look like a cooking video (\). Please try a recipe or cooking tutorial video.";
+        return "This doesn't look like a cooking video (${contentType ?? 'Unknown'}). Please try a recipe or cooking tutorial video.";
       case ValidationResult.lowConfidence:
         return "We're not fully sure this is a recipe video. Results may not be accurate.";
       case ValidationResult.insufficientContent:

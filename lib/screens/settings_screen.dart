@@ -42,9 +42,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final jsonData = await ref.read(recipesProvider.notifier).exportRecipes();
       final directory = await getTemporaryDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final tempFile = File('${directory.path}/gastrotator_backup_$timestamp.json');
+      final tempFile = File("${directory.path}/gastrotator_backup_$timestamp.json");
       await tempFile.writeAsString(jsonData);
-      
+
       await Share.shareXFiles(
         [XFile(tempFile.path)],
         subject: 'GastRotator Recipe Backup',
@@ -52,9 +52,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export failed: $e')));
-      } finally {
+      }
+    } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
+  }
 
   Future<void> _importCollection() async {
     setState(() => _isProcessing = true);
@@ -62,7 +64,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['json'],
-        withData: true, // Crucial for some Android URIs
+        withData: true, 
       );
 
       if (result != null && result.files.single.bytes != null) {
@@ -71,12 +73,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Collection imported successfully!')));
         }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Import failed: $e')));
-      } finally {
+      }
+    } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -113,7 +118,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
                       const SizedBox(height: 12),
                       TextButton.icon(
-                        onPressed: () => launchUrl(Uri.parse("https://aistudio.google.com/app/apikey")),
+                        onPressed: () => launchUrl(Uri.parse("https://aistudio.google.com/app/apikey")),        
                         icon: const Icon(Icons.open_in_new, size: 16),
                         label: const Text("Get Your Free Key at Google AI Studio"),
                       ),
@@ -122,7 +127,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-                            TextField(
+              TextField(
                 controller: _apiKeyController,
                 obscureText: true,
                 decoration: InputDecoration(
@@ -152,7 +157,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ],
                   ),
                 ),
-              ),
               ),
               const SizedBox(height: 40),
               _buildSectionTitle(context, "Backup & Restore"),
@@ -221,6 +225,4 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }).toList(),
     );
   }
-
-
-
+}

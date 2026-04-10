@@ -1,4 +1,3 @@
-import '../models/validation_result.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,244 +6,238 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../models/recipe.dart';
+import '../models/validation_result.dart';
 import '../utils/unit_converter.dart';
 
-class RecipeDetailScreen extends ConsumerStatefulWidget {
+class RecipeDetailScreen extends ConsumerWidget {
   final Recipe recipe;
 
   const RecipeDetailScreen({super.key, required this.recipe});
 
   @override
-  ConsumerState<RecipeDetailScreen> createState() => _RecipeDetailScreenState();
-}
-
-class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
-  @override
-  void initState() {
-    super.initState();
-    // Enable wakelock when entering the recipe detail screen
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Enable wakelock when on this screen
     WakelockPlus.enable();
-  }
 
-  @override
-  void dispose() {
-    // Disable wakelock when leaving the screen
-    WakelockPlus.disable();
-    super.dispose();
-  }
-
-  Future<void> _launchUrl() async {
-    if (widget.recipe.youtubeUrl == null) return;
-    final Uri url = Uri.parse(widget.recipe.youtubeUrl!);
-    if (!await launchUrl(url)) {
-      throw Exception('Could not launch $url');
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final recipe = widget.recipe;
-    
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: const Color(0xFFFCF9F8),
       body: CustomScrollView(
         slivers: [
-          SliverAppBar(
-            expandedHeight: 300,
-            pinned: true,
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.help_outline, color: Colors.white),
-                onPressed: () {
-                  Navigator.pushNamed(context, '/help', arguments: {'section': 'DETAIL'});
-                },
-              ),
-            ],
-            flexibleSpace: FlexibleSpaceBar(
-              background: recipe.thumbnailUrl != null
-                  ? CachedNetworkImage(
-                      imageUrl: recipe.thumbnailUrl!,
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => _buildPlaceholder(context),
-                      errorWidget: (context, url, error) => _buildPlaceholder(context),
-                    )
-                  : _buildPlaceholder(context),
-            ),
-          ),
+          _buildSliverAppBar(context),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(24.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    recipe.dishName,
-                    style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.onSurface,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  // Vertical Tags
-                  _buildChip(context, recipe.category, Icons.category_outlined),
-                  const SizedBox(height: 8),
-                  _buildChip(context, "${recipe.totalCalories?.toStringAsFixed(0) ?? 0} kcal", Icons.local_fire_department_outlined),
-                  const SizedBox(height: 8),
-                  _buildChip(context, "${recipe.caloriesPer100g?.toStringAsFixed(0) ?? 0} kcal/100g", Icons.scale_outlined),
-                  const SizedBox(height: 8),
-                  _buildChip(context, "${recipe.totalWeightGrams?.toStringAsFixed(0) ?? 0} g", Icons.monitor_weight_outlined),
-                  const SizedBox(height: 8),
-                  _buildChip(context, recipe.cookingTime ?? "Time: Unknown", Icons.timer_outlined),
-                  
-                  const SizedBox(height: 24),
-                  // YouTube Info
-                  if (recipe.youtubeChannel != null)
-                    Text(
-                      "Channel: ${recipe.youtubeChannel}",
-                      style: GoogleFonts.plusJakartaSans(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                  if (recipe.youtubeUrl != null)
-                    GestureDetector(
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        _launchUrl();
-                      },
-                      child: Text(
-                        recipe.youtubeUrl!,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.blue,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                    ),
-
-                  const SizedBox(height: 32),
-                  _buildSectionTitle(context, "Ingredients"),
-                  const SizedBox(height: 16),
-                  ...recipe.ingredients.split('\n').where((s) => s.isNotEmpty).map((item) {
-                    final isHeader = item.trim().endsWith(':');
-                    final processedText = isHeader ? item : UnitConverter.convertString(item);
-                    
-                    return Padding(
-                      padding: EdgeInsets.only(
-                        bottom: isHeader ? 8 : 12,
-                        top: isHeader ? 12 : 0,
-                        left: isHeader ? 0 : 16,
+                  if (recipe.validationResult == ValidationResult.foodAdjacent || recipe.validationResult == ValidationResult.lowConfidence)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 24),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: recipe.validationResult == ValidationResult.lowConfidence ? Colors.orange[50] : Colors.blue[50],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: recipe.validationResult == ValidationResult.lowConfidence ? Colors.orange[200]! : Colors.blue[200]!),
                       ),
                       child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (!isHeader)
-                            Icon(Icons.check_circle_outline, size: 18, color: Theme.of(context).colorScheme.secondary),
-                          if (!isHeader) const SizedBox(width: 12),
+                          Icon(
+                            recipe.validationResult == ValidationResult.lowConfidence ? Icons.warning_amber_rounded : Icons.info_outline,
+                            color: recipe.validationResult == ValidationResult.lowConfidence ? Colors.orange[800] : Colors.blue[800],
+                          ),
+                          const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              processedText,
-                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                fontWeight: isHeader ? FontWeight.bold : FontWeight.normal,
-                                color: isHeader ? Theme.of(context).colorScheme.primary : null,
-                                fontSize: isHeader ? 18 : 16,
+                              recipe.validationResult.userMessage(null),
+                              style: TextStyle(
+                                color: recipe.validationResult == ValidationResult.lowConfidence ? Colors.orange[900] : Colors.blue[900],
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ),
                         ],
                       ),
-                    );
-                  }),
-                  
-                  const SizedBox(height: 32),
-                  _buildSectionTitle(context, "Instructions"),
-                  const SizedBox(height: 16),
-                  ...recipe.recipe.split('\n').where((s) => s.isNotEmpty).map((step) => Padding(
-                    padding: const EdgeInsets.only(bottom: 20),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.primary,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Center(
-                            child: Text(
-                              step.trim().startsWith(RegExp(r'\d')) ? step.split('.').first : "",
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(child: Text(step.trim().startsWith(RegExp(r'\d')) && step.contains('.') ? step.substring(step.indexOf('.') + 1).trim() : step, style: Theme.of(context).textTheme.bodyLarge)),
-                      ],
                     ),
-                  )),
-                  const SizedBox(height: 40),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        HapticFeedback.mediumImpact();
-                        _launchUrl();
-                      },
-                      icon: const Icon(Icons.play_circle_outline),
-                      label: const Text("Open on YouTube"),
+                  Text(
+                    recipe.dishName,
+                    style: GoogleFonts.notoSerif(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w900,
+                      height: 1.1,
+                      letterSpacing: -0.5,
                     ),
                   ),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          recipe.category.toUpperCase(),
+                          style: GoogleFonts.shareTechMono(
+                            color: Colors.white,
+                            fontSize: 12,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ),
+                      if (recipe.cookingTime != null) ...[
+                        const SizedBox(width: 12),
+                        const Icon(Icons.timer_outlined, size: 16),
+                        const SizedBox(width: 4),
+                        Text(
+                          recipe.cookingTime!,
+                          style: GoogleFonts.manrope(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  _buildNutritionGrid(context),
+                  const SizedBox(height: 32),
+                  _buildSectionTitle(context, "INGREDIENTS"),
+                  const SizedBox(height: 16),
+                  Text(
+                    recipe.ingredients,
+                    style: GoogleFonts.manrope(
+                      fontSize: 16,
+                      height: 1.6,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  _buildSectionTitle(context, "INSTRUCTIONS"),
+                  const SizedBox(height: 16),
+                  Text(
+                    recipe.recipe,
+                    style: GoogleFonts.manrope(
+                      fontSize: 16,
+                      height: 1.6,
+                    ),
+                  ),
+                  if (recipe.notes != null && recipe.notes!.isNotEmpty) ...[
+                    const SizedBox(height: 32),
+                    _buildSectionTitle(context, "TIPS & WARNINGS"),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.yellow[50],
+                        border: Border.all(color: Colors.yellow[200]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        recipe.notes!,
+                        style: GoogleFonts.manrope(
+                          fontSize: 15,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 80),
                 ],
               ),
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildPlaceholder(BuildContext context) {
-    return Container(
-      color: Theme.of(context).colorScheme.primary.withAlpha(25),
-      child: Center(
-        child: Icon(
-          Icons.restaurant,
-          size: 80,
-          color: Theme.of(context).colorScheme.primary.withAlpha(128),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => launchUrl(Uri.parse(recipe.youtubeUrl!)),
+        backgroundColor: Colors.black,
+        icon: const Icon(Icons.play_circle_fill, color: Colors.white),
+        label: Text(
+          "WATCH ON YOUTUBE",
+          style: GoogleFonts.shareTechMono(color: Colors.white, letterSpacing: 1),
         ),
       ),
     );
   }
 
-  Widget _buildChip(BuildContext context, String label, IconData icon) {
+  Widget _buildSliverAppBar(BuildContext context) {
+    return SliverAppBar(
+      expandedHeight: 250.0,
+      floating: false,
+      pinned: true,
+      backgroundColor: Colors.black,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back, color: Colors.white),
+        onPressed: () {
+          WakelockPlus.disable();
+          Navigator.pop(context);
+        },
+      ),
+      flexibleSpace: FlexibleSpaceBar(
+        background: recipe.thumbnailUrl != null
+            ? CachedNetworkImage(
+                imageUrl: recipe.thumbnailUrl!,
+                fit: BoxFit.cover,
+                color: Colors.black.withOpacity(0.3),
+                colorBlendMode: BlendMode.darken,
+              )
+            : Container(color: Colors.black26),
+      ),
+    );
+  }
+
+  Widget _buildNutritionGrid(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        color: Colors.white,
+        border: Border.all(color: Colors.black12),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          Icon(icon, size: 16, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(width: 8),
-          Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          _buildNutritionItem("CALORIES", "${recipe.totalCalories?.round() ?? '-'}"),
+          _buildNutritionItem("KCAL/100G", "${recipe.caloriesPer100g?.round() ?? '-'}"),
+          _buildNutritionItem("WEIGHT", "${recipe.totalWeightGrams?.round() ?? '-'}g"),
         ],
       ),
+    );
+  }
+
+  Widget _buildNutritionItem(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.shareTechMono(
+            fontSize: 10,
+            color: Colors.grey[600],
+            letterSpacing: 1,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: GoogleFonts.notoSerif(
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildSectionTitle(BuildContext context, String title) {
     return Text(
       title,
-      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+      style: GoogleFonts.shareTechMono(
+        fontSize: 14,
         fontWeight: FontWeight.bold,
-        letterSpacing: 1.2,
+        letterSpacing: 2,
+        color: Colors.black,
       ),
     );
   }
 }
-

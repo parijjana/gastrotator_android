@@ -85,13 +85,13 @@ class RecipeErrorScreen extends ConsumerWidget {
                       message = currentRecipe.validationResult.userMessage(currentRecipe.flavorProfile);
                     } else if (currentRecipe.transcriptError == TranscriptFetchError.unsupportedLanguage) {
                       final langName = Recipe.getLanguageName(currentRecipe.category);
-                      message = "This video's transcript is in \. Only English is supported right now.";
+                      message = "This video's transcript is in $langName. Only English is supported right now.";
                     }
 
                     return Text(
                       currentRecipe.importStatus == "No transcript found"
                           ? message
-                          : "The AI encountered an error while processing this recipe: \",
+                          : "The AI encountered an error while processing this recipe: ${currentRecipe.importStatus}",
                       style: GoogleFonts.manrope(
                         fontSize: 16,
                         height: 1.5,

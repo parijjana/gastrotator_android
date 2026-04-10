@@ -10,13 +10,19 @@ void main() {
 
   group('GeminiService Parsing', () {
     test('parseRecipe should handle raw JSON correctly', () {
-      const jsonText = '{"dish_name": "Butter Chicken", "category": "Dinner", "ingredients": "Chicken, Butter", "recipe": "Cook it."}';
-      final recipe = geminiService.parseRecipe(jsonText, 'Title', 'Channel', 'URL', 'thumb', {
-        'total_calories': 500,
-        'calories_per_100g': 150,
-        'total_weight_grams': 300,
-        'cooking_time': '45 mins',
-      });
+      const jsonText = '''
+{
+  "dish_name": "Butter Chicken",
+  "category": "Dinner",
+  "ingredients": "Chicken, Butter",
+  "recipe": "Cook it.",
+  "total_calories": 500,
+  "calories_per_100g": 150,
+  "total_weight_grams": 300,
+  "cooking_time": "45 mins"
+}
+''';
+      final recipe = geminiService.parseRecipe(jsonText, 'Title', 'Channel', 'URL', 'thumb');
 
       expect(recipe, isNotNull);
       expect(recipe!.dishName, 'Butter Chicken');
@@ -26,9 +32,7 @@ void main() {
 
     test('parseRecipe should handle markdown blocks correctly', () {
       const jsonText = '```json\n{"dish_name": "Salad", "category": "Lunch", "ingredients": "Lettuce", "recipe": "Mix it."}\n```';
-      final recipe = geminiService.parseRecipe(jsonText, 'Title', 'Channel', 'URL', 'thumb', {
-        'total_calories': 100,
-      });
+      final recipe = geminiService.parseRecipe(jsonText, 'Title', 'Channel', 'URL', 'thumb');
 
       expect(recipe, isNotNull);
       expect(recipe!.dishName, 'Salad');
@@ -36,7 +40,7 @@ void main() {
 
     test('parseRecipe should return null on invalid JSON', () {
       const jsonText = 'invalid json';
-      final recipe = geminiService.parseRecipe(jsonText, 'Title', 'Channel', 'URL', 'thumb', {});
+      final recipe = geminiService.parseRecipe(jsonText, 'Title', 'Channel', 'URL', 'thumb');
 
       expect(recipe, isNull);
     });

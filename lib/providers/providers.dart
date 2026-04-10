@@ -10,7 +10,6 @@ import '../models/validation_result.dart';
 import '../services/youtube_service.dart';
 import '../services/gemini_service.dart';
 
-// Secure Storage Provider
 final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
   return const FlutterSecureStorage(
     aOptions: AndroidOptions(
@@ -19,7 +18,6 @@ final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
   );
 });
 
-// Theme Settings
 class ThemeSettings {
   final Color primaryColor;
   final Brightness brightness;
@@ -84,7 +82,6 @@ final themeProvider = NotifierProvider<ThemeNotifier, ThemeSettings>(() {
   return ThemeNotifier();
 });
 
-// API Key Provider
 final apiKeyProvider = NotifierProvider<ApiKeyNotifier, String?>(() {
   return ApiKeyNotifier();
 });
@@ -118,7 +115,6 @@ class ApiKeyNotifier extends Notifier<String?> {
   }
 }
 
-// Recipes Provider
 final recipesProvider = NotifierProvider<RecipesNotifier, List<Recipe>>(() {
   return RecipesNotifier();
 });
@@ -213,7 +209,7 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
       }
       await loadRecipes();
     } catch (e) {
-      throw "Invalid backup file: \";
+      debugPrint("Invalid backup file: ${e.toString()}");
     }
   }
 
@@ -242,13 +238,14 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
   Future<void> triggerMagicImport(String url) async {
     final timestamp = DateTime.now().toString().split('.').first;
     final placeholder = Recipe(
-      dishName: "AI Magic Import: \",
+      dishName: "AI Magic Import: $timestamp",
       category: "Pending",
       ingredients: "",
       recipe: "",
       youtubeUrl: url,
       importStatus: "Placeholder Created",
     );
+
 
     await addRecipe(placeholder);
   }
@@ -276,7 +273,7 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
         return;
       }
     } catch (e) {
-      debugPrint("Auto-process error: \");
+      debugPrint("Auto-process error: $e");
       await updateRecipe(recipe.copyWith(importStatus: "Failed: Auto-process"));
     }
   }
@@ -297,7 +294,6 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
       ));
     } else {
       await updateRecipe(recipe.copyWith(importStatus: "Failed: Metadata"));
-      throw "Metadata fetch failed";
     }
   }
 
@@ -343,7 +339,6 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
 
     final gemini = GeminiService(apiKey: apiKey);
 
-    // 1. Detect Language
     await updateRecipe(recipe.copyWith(importStatus: "Analyzing Language..."));
     final langCode = await gemini.detectLanguage(transcript);
     if (langCode != null && langCode != 'en') {
@@ -355,7 +350,6 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
       return;
     }
 
-    // 2. Content Validation
     await updateRecipe(recipe.copyWith(importStatus: "Validating Content..."));
     final validation = await gemini.validateContent(transcript);
     final valResult = validation['result'] as ValidationResult;
@@ -364,16 +358,14 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
       await updateRecipe(recipe.copyWith(
         importStatus: "No transcript found", 
         validationResult: valResult,
-        flavorProfile: validation['content_type'], 
+        flavorProfile: (validation['content_type'] as String?), 
       ));
       return;
     }
 
-    // Update with validation warning if any, but continue
     final recipeWithVal = recipe.copyWith(validationResult: valResult);
     await updateRecipe(recipeWithVal);
 
-    // 3. Length Check & Processing Strategy
     String finalInputText = transcript;
     if (recipeWithVal.videoLength == VideoLength.long && recipeWithVal.importStatus != "Processing Confirmed") {
       await updateRecipe(recipeWithVal.copyWith(importStatus: "Awaiting Confirmation (Long Video)"));
@@ -386,13 +378,13 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
       if (segments != null && segments.isNotEmpty) {
         List<String> summaries = [];
         String currentChunk = "";
-        double chunkStartTime = segments.first['start'] ?? 0.0;
+        double chunkStartTime = (segments.first['start'] as num?)?.toDouble() ?? 0.0;
 
         for (var seg in segments) {
-          currentChunk += " \";
-          double currentTime = seg['start'] ?? 0.0;
+          currentChunk += " ${seg['text']}";
+          double currentTime = (seg['start'] as num?)?.toDouble() ?? 0.0;
           
-          if (currentTime - chunkStartTime > 300) { // 5 min chunks
+          if (currentTime - chunkStartTime > 300) {
             final summary = await gemini.summarizeSegment(currentChunk);
             if (summary != null) summaries.add(summary);
             currentChunk = "";
@@ -420,11 +412,10 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
       await updateRecipe(result.copyWith(
         id: recipeWithVal.id,
         importStatus: "Completed",
-        validationResult: valResult, // Carry forward
+        validationResult: valResult, 
       ));
     } else {
       await updateRecipe(recipeWithVal.copyWith(importStatus: "Failed: Gemini"));
-      throw "Gemini extraction failed";
     }
   }
 
