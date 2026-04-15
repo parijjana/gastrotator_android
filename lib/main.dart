@@ -8,13 +8,16 @@ import 'screens/settings_screen.dart';
 import 'screens/recipe_detail_screen.dart';
 import 'screens/about_screen.dart';
 import 'screens/help_screen.dart';
+import 'screens/log_screen.dart';
 import 'screens/recipe_error_screen.dart';
 import 'providers/providers.dart';
 import 'models/recipe.dart';
 import 'theme/app_theme.dart';
+import 'services/logger/app_logger.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppLogger().init();
   runApp(
     const ProviderScope(
       child: GastRotatorApp(),
@@ -45,9 +48,10 @@ class GastRotatorApp extends ConsumerWidget {
         '/import': (context) => const ImportRecipeScreen(),
         '/settings': (context) => const SettingsScreen(),
         '/about': (context) => const AboutScreen(),
+        '/logs': (context) => const LogScreen(),
         '/help': (context) {
           final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-          return HelpScreen(section: args?['section']);
+          return HelpScreen(initialSection: args?['section']);
         },
         '/recipe-detail': (context) {
           final recipe = ModalRoute.of(context)!.settings.arguments as Recipe;

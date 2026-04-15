@@ -1,4 +1,4 @@
-# GastRotator (Android) ??
+# GastRotator (Android)
 
 **AI-powered recipe manager for the kinetic kitchen.**
 
@@ -6,7 +6,7 @@ GastRotator is a local-first, privacy-centric Android application built with Flu
 
 ---
 
-## ? Key Features (V1)
+## Key Features (V1)
 
 - **Magic YouTube Import:** Simply share a cooking video from YouTube. The app fetches the transcript and uses **Gemini 2.x Flash** to generate a structured recipe.
 - **Nutritional Intelligence:** Automatically estimates Total Calories, kcal/100g, and total dish weight in **SI Units (grams)**.
@@ -17,7 +17,7 @@ GastRotator is a local-first, privacy-centric Android application built with Flu
 
 ---
 
-## ?? Future Roadmap
+## Future Roadmap
 
 ### **v2: The Cognitive Kitchen (In Progress)**
 | Feature | Description |
@@ -36,7 +36,7 @@ GastRotator is a local-first, privacy-centric Android application built with Flu
 
 ---
 
-## ??? Setup & Usage
+## Setup & Usage
 
 1. **Gemini API Key:** To enable "AI Magic Import," you must provide your own API key. You can get a free one from [Google AI Studio](https://aistudio.google.com/).
 2. **Importing:** Use the Android **Share** button on any YouTube video and select "GastRotator" to begin extraction.
@@ -44,10 +44,10 @@ GastRotator is a local-first, privacy-centric Android application built with Flu
 
 ---
 
-## ?? Privacy Policy
+## Privacy Policy
 The official privacy policy can be viewed at:  
 [https://github.com/parijjana/gastrotator_android/blob/main/docs/privacy_policy.html](https://github.com/parijjana/gastrotator_android/blob/main/docs/privacy_policy.html)
 
 ---
 *Stay hungry, stay kinetic.*  
-© 2026 GastRotator Project.
+Â© 2026 GastRotator Project.

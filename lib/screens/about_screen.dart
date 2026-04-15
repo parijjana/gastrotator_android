@@ -154,17 +154,9 @@ class AboutScreen extends StatelessWidget {
                 ),
 
                 const SizedBox(height: 48),
-                const Divider(),
-                const SizedBox(height: 24),
-                const Text(
-                  'Made with ❤️ for high-energy kitchens.',
-                  style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
+                ],
                 ),
-                const SizedBox(height: 24),
-              ],
-            ),
-          );
-        },
+                );        },
       ),
     );
   }

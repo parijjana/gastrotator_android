@@ -3,64 +3,164 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import '../models/recipe.dart';
 import '../models/validation_result.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter/foundation.dart';
+import '../models/transcript_error.dart';
+import 'logger/app_logger.dart';
 
 class GeminiService {
   final String apiKey;
   final GenerativeModel? _mockModel;
+  final AppLogger _logger = AppLogger();
+  final String? lastSuccessfulModel;
+  final Function(String)? onModelSuccess;
 
-  GeminiService({required this.apiKey, GenerativeModel? mockModel}) : _mockModel = mockModel;
+  // Priority order for families (Generic keywords, no hardcoded versions)
+  static const List<String> _priorityKeywords = ['flash', 'gemma'];
 
-  Future<String> discoverLatestModel() async {
+  GeminiService({
+    required this.apiKey,
+    GenerativeModel? mockModel,
+    this.lastSuccessfulModel,
+    this.onModelSuccess,
+  }) : _mockModel = mockModel;
+
+  /// 1. Dynamically discover all available models and rank them into a "Ladder"
+  Future<List<String>> discoverAndRankModels() async {
     try {
+      _logger.info("Discovering available Gemini models for ladder build...", apiKeyToMask: apiKey);
       final url = Uri.parse("https://generativelanguage.googleapis.com/v1beta/models?key=$apiKey");
       final response = await http.get(url);
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final List<dynamic> models = data['models'] ?? [];
+      if (response.statusCode != 200) {
+        _logger.warn("Model discovery failed (${response.statusCode})", details: response.body, apiKeyToMask: apiKey);
+        return ['gemini-flash-latest']; // Version-agnostic fallback
+      }
 
-        final flashModels = models.where((m) {
-          final String name = m['name'] ?? "";
-          final List<dynamic> methods = m['supportedGenerationMethods'] ?? [];
-          return name.contains('gemini') &&
-                 name.contains('flash') &&
-                 methods.contains('generateContent') &&
-                 !name.contains('experimental');
-        }).toList();
+      final data = json.decode(response.body);
+      final List<dynamic> rawModels = data['models'] ?? [];
+      List<String> discovered = [];
 
-        if (flashModels.isNotEmpty) {
-          flashModels.sort((a, b) => (b['name'] as String).compareTo(a['name'] as String));
+      for (var m in rawModels) {
+        final String name = m['name'] ?? "";
+        final List<dynamic> methods = m['supportedGenerationMethods'] ?? [];
+        
+        final nameLower = name.toLowerCase();
+        final isViableFamily = nameLower.contains('gemini') || nameLower.contains('gemma');
+        final isExperimental = nameLower.contains('experimental') || nameLower.contains('-exp');
+        final isDeprecated = nameLower.contains('deprecated');
 
-          String bestModel = flashModels.first['name'];
-          if (bestModel.startsWith('models/')) {
-            bestModel = bestModel.replaceFirst('models/', '');
-          }
-          return bestModel;
+        if (isViableFamily && 
+            methods.contains('generateContent') && 
+            !isExperimental && 
+            !isDeprecated) {
+          discovered.add(name.replaceFirst('models/', ''));
         }
       }
+
+      // Build the Ladder (Flash & Gemma Only)
+      List<String> ladder = [];
+
+      // If we have a last successful model, it goes to the VERY top of the list
+      if (lastSuccessfulModel != null && discovered.contains(lastSuccessfulModel)) {
+        ladder.add(lastSuccessfulModel!);
+        _logger.info("Prioritizing last successful model: $lastSuccessfulModel");
+      }
+
+      for (var keyword in _priorityKeywords) {
+        final matches = discovered.where((m) => m.toLowerCase().contains(keyword)).toList();
+        matches.sort((a, b) => b.compareTo(a)); // Prioritize newer versions/names
+        for (var m in matches) {
+          if (!ladder.contains(m)) ladder.add(m);
+        }
+      }
+
+      _logger.info("Dynamic Ladder Built: ${ladder.take(3).join(' -> ')} (+${ladder.length > 3 ? ladder.length - 3 : 0} more)");
+      return ladder.isNotEmpty ? ladder : ['gemini-flash-latest'];
     } catch (e) {
-      debugPrint("Model discovery failed: $e");
+      _logger.error("Model discovery exception", details: e.toString(), apiKeyToMask: apiKey);
+      return ['gemini-flash-latest'];
     }
-    return 'gemini-2.0-flash';
+  }
+
+  /// 2. Generic execution wrapper that "climbs down" the ladder on failure
+  Future<T?> _runWithLadder<T>({
+    required String actionName,
+    required Future<T?> Function(String modelName) task,
+  }) async {
+    // 1. Try the last successful model first (FAST PATH)
+    if (lastSuccessfulModel != null && lastSuccessfulModel!.isNotEmpty) {
+      _logger.info("[\$actionName] Attempting with prioritized model: \$lastSuccessfulModel");
+      try {
+        final result = await task(lastSuccessfulModel!);
+        if (result != null) {
+          _logger.info("[\$actionName] SUCCESS using \$lastSuccessfulModel");
+          if (onModelSuccess != null) {
+            onModelSuccess!(lastSuccessfulModel!);
+          }
+          return result;
+        }
+      } catch (e) {
+        _logger.warn("[\$actionName] Prioritized model \$lastSuccessfulModel failed or unavailable. Falling back to ladder...");
+      }
+    }
+
+    // 2. Ladder Fallback (SLOW PATH)
+    final ladder = await discoverAndRankModels();
+    
+    for (String modelName in ladder) {
+      // Skip if we already tried it in the fast path
+      if (modelName == lastSuccessfulModel) continue;
+
+      _logger.info("[\$actionName] Attempting with ladder model: \$modelName");
+      
+      try {
+        final result = await task(modelName);
+        if (result != null) {
+          _logger.info("[\$actionName] SUCCESS using \$modelName");
+          if (onModelSuccess != null) {
+            onModelSuccess!(modelName);
+          }
+          return result;
+        }
+      } on GenerativeAIException catch (e) {
+        final errStr = e.toString();
+        _logger.warn("[\$actionName] FAILED with \$modelName", details: errStr, apiKeyToMask: apiKey);
+        
+        // 429 is a personal limit, no point in switching models usually, but ladder might have different quotas
+        if (errStr.contains('429')) {
+          _logger.error("[\$actionName] API Limit Reached (429)");
+          throw TranscriptFetchError.apiLimitReached;
+        }
+        
+        // 503 (Overloaded) or 404 (Not Found/Deprecated) -> Try next rung
+        if (errStr.contains('503') || errStr.contains('404')) {
+          _logger.warn("[\$actionName] Model \$modelName is unavailable. Falling back...");
+          continue; 
+        }
+        
+        rethrow; // Other errors (like 400 Bad Request) shouldn't be retried
+      } catch (e) {
+        _logger.error("[\$actionName] Unexpected Exception", details: e.toString(), apiKeyToMask: apiKey);
+        continue;
+      }
+    }
+    
+    _logger.error("[\$actionName] CRITICAL: All models in ladder failed.");
+    return null;
   }
 
   Future<String?> detectLanguage(String text) async {
-    final String modelName = await discoverLatestModel();
-    final model = _mockModel ?? GenerativeModel(
-      model: modelName,
-      apiKey: apiKey,
+    return _runWithLadder<String>(
+      actionName: "Language Detection",
+      task: (modelName) async {
+        final model = _mockModel ?? GenerativeModel(
+          model: modelName,
+          apiKey: apiKey,
+        );
+        final prompt = "Detect the language of the following text. Reply with only the ISO 639-1 language code (e.g. 'en', 'hi', 'ta'). Text: ${text.substring(0, text.length > 1000 ? 1000 : text.length)}";
+        final response = await model.generateContent([Content.text(prompt)]);
+        return response.text?.trim().toLowerCase();
+      },
     );
-
-    final prompt = "Detect the language of the following text. Reply with only the ISO 639-1 language code (e.g. 'en', 'hi', 'ta'). Text: ${text.substring(0, text.length > 1000 ? 1000 : text.length)}";
-
-    try {
-      final response = await model.generateContent([Content.text(prompt)]);
-      return response.text?.trim().toLowerCase();
-    } catch (e) {
-      debugPrint("Language Detection Error: $e");
-      return null;
-    }
   }
 
   Future<Map<String, dynamic>> validateContent(String transcript) async {
@@ -68,60 +168,57 @@ class GeminiService {
       return {'result': ValidationResult.insufficientContent};
     }
 
-    final String modelName = await discoverLatestModel();
-    final model = _mockModel ?? GenerativeModel(
-      model: modelName,
-      apiKey: apiKey,
+    final result = await _runWithLadder<Map<String, dynamic>>(
+      actionName: "Domain Validation",
+      task: (modelName) async {
+        final model = _mockModel ?? GenerativeModel(
+          model: modelName,
+          apiKey: apiKey,
+        );
+        final prompt = """
+        You are a content classifier for a cooking app. Analyse the following transcript and return a JSON object with exactly these fields:
+        {
+          "is_cooking_content": boolean,
+          "confidence": "high" | "medium" | "low",
+          "content_type": string,
+          "has_recipe": boolean,
+          "reason": string
+        }
+        Return only valid JSON. No preamble, no markdown.
+        
+        Transcript:
+        $transcript
+        """;
+        
+        final response = await model.generateContent([Content.text(prompt)]);
+        if (response.text == null) return null;
+        
+        final data = json.decode(response.text!.replaceAll('```json', '').replaceAll('```', '').trim());
+        
+        if (data['confidence'] == 'low') return {'result': ValidationResult.lowConfidence};
+        if (data['is_cooking_content'] == false) return {'result': ValidationResult.wrongDomain, 'content_type': data['content_type']};
+        if (data['has_recipe'] == false) return {'result': ValidationResult.foodAdjacent};
+        
+        return {'result': ValidationResult.valid};
+      },
     );
-
-    final prompt = """
-    You are a content classifier for a cooking app. Analyse the following transcript and return a JSON object with exactly these fields:
-    {
-      "is_cooking_content": boolean,
-      "confidence": "high" | "medium" | "low",
-      "content_type": string,
-      "has_recipe": boolean,
-      "reason": string
-    }
-    Return only valid JSON. No preamble, no markdown.
     
-    Transcript:
-    $transcript
-    """;
-
-    try {
-      final response = await model.generateContent([Content.text(prompt)]);
-      if (response.text == null) return {'result': ValidationResult.lowConfidence};
-      
-      final data = json.decode(response.text!.replaceAll('```json', '').replaceAll('```', '').trim());
-      
-      if (data['confidence'] == 'low') return {'result': ValidationResult.lowConfidence};
-      if (data['is_cooking_content'] == false) return {'result': ValidationResult.wrongDomain, 'content_type': data['content_type']};
-      if (data['has_recipe'] == false) return {'result': ValidationResult.foodAdjacent};
-      
-      return {'result': ValidationResult.valid};
-    } catch (e) {
-      debugPrint("Validation Error: $e");
-      return {'result': ValidationResult.lowConfidence};
-    }
+    return result ?? {'result': ValidationResult.lowConfidence};
   }
 
   Future<String?> summarizeSegment(String text) async {
-    final String modelName = await discoverLatestModel();
-    final model = _mockModel ?? GenerativeModel(
-      model: modelName,
-      apiKey: apiKey,
+    return _runWithLadder<String>(
+      actionName: "Segment Summary",
+      task: (modelName) async {
+        final model = _mockModel ?? GenerativeModel(
+          model: modelName,
+          apiKey: apiKey,
+        );
+        final prompt = "This is a segment of a cooking video transcript. Summarize only the cooking-relevant content: ingredients mentioned, steps described, and any tips. Be concise. Text:\n$text";
+        final response = await model.generateContent([Content.text(prompt)]);
+        return response.text?.trim();
+      },
     );
-
-    final prompt = "This is a segment of a cooking video transcript. Summarize only the cooking-relevant content: ingredients mentioned, steps described, and any tips. Be concise. Text:\n$text";
-
-    try {
-      final response = await model.generateContent([Content.text(prompt)]);
-      return response.text?.trim();
-    } catch (e) {
-      debugPrint("Summarization Error: $e");
-      return null;
-    }
   }
 
   Recipe? parseRecipe(String jsonText, String title, String channel, String url, String? thumbnail) {
@@ -162,7 +259,7 @@ class GeminiService {
         notes: data['tips_warnings']?.toString(),
       );
     } catch (e) {
-      debugPrint("Parsing Error: $e");
+      _logger.error("Recipe Parsing Error", details: e.toString(), apiKeyToMask: apiKey);
       return null;
     }
   }
@@ -175,12 +272,18 @@ class GeminiService {
     String? transcript,
     String? description,
   }) async {
-    final String modelName = await discoverLatestModel();
-    
-    final model = _mockModel ?? GenerativeModel(
-      model: modelName,
-      apiKey: apiKey,
-      systemInstruction: Content.system("""
+    final String sourceText = (transcript != null && transcript.isNotEmpty)
+        ? "RAW TRANSCRIPT:\n$transcript"
+        : "VIDEO DESCRIPTION:\n$description";
+
+    return _runWithLadder<Recipe>(
+      actionName: "Recipe Extraction",
+      task: (modelName) async {
+        // Note: For complex tasks like this, we need to pass system instructions.
+        final specializedModel = _mockModel ?? GenerativeModel(
+          model: modelName,
+          apiKey: apiKey,
+          systemInstruction: Content.system("""
 You are a cooking assistant. You will receive a raw auto-generated YouTube transcript or video description. Perform the following two operations in order:
 
 STAGE 1 — CLEAN (internal, do not output):
@@ -194,7 +297,7 @@ Return ONLY a raw JSON object with this exact structure:
   "dish_name": "Name of the dish",
   "category": "Comma-separated list from: Breakfast, Lunch, Dinner, Dessert, Snack",
   "ingredients": "List of ingredients with quantities, one per line",
-  "recipe": "Step-by-step cooking instructions with no gaps",
+  "recipe": "Step-by-step cooking instructions. Use a numbered list (1., 2., 3.) with each step on a new line. Ensure logical flow and clarity.",
   "tips_warnings": "Key tips or warnings mentioned by the presenter",
   "total_calories": <number>,
   "total_weight_grams": <number>,
@@ -204,21 +307,12 @@ Return ONLY a raw JSON object with this exact structure:
 
 No preamble, no commentary.
 """),
-    );
+        );
 
-    final String sourceText = (transcript != null && transcript.isNotEmpty)
-        ? "RAW TRANSCRIPT:\n$transcript"
-        : "VIDEO DESCRIPTION:\n$description";
-
-    try {
-      final response = await model.generateContent([Content.text(sourceText)]);
-
-      if (response.text != null) {
+        final response = await specializedModel.generateContent([Content.text(sourceText)]);
+        if (response.text == null) return null;
         return parseRecipe(response.text!, title, channel, url, thumbnail);
-      }
-    } catch (e) {
-      debugPrint("Gemini Unified Extraction Error: $e");
-    }
-    return null;
+      },
+    );
   }
 }

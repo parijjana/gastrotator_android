@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/recipe.dart';
 import '../models/transcript_error.dart';
-import '../models/video_length.dart';
 import '../models/validation_result.dart';
 import '../providers/providers.dart';
 

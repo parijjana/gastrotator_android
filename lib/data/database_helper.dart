@@ -21,7 +21,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 8, 
+      version: 9, 
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -50,6 +50,15 @@ class DatabaseHelper {
         notes TEXT,
         transcript_error TEXT,
         validation_result TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT NOT NULL,
+        level TEXT NOT NULL,
+        message TEXT NOT NULL,
+        technical_details TEXT
       )
     ''');
   }
@@ -81,6 +90,42 @@ class DatabaseHelper {
     if (oldVersion < 8) {
       try { await db.execute('ALTER TABLE recipes ADD COLUMN validation_result TEXT'); } catch(e) {}
     }
+    if (oldVersion < 9) {
+      await db.execute('''
+        CREATE TABLE logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          timestamp TEXT NOT NULL,
+          level TEXT NOT NULL,
+          message TEXT NOT NULL,
+          technical_details TEXT
+        )
+      ''');
+    }
+  }
+
+  // Log methods
+  Future<int> insertLog(Map<String, dynamic> log) async {
+    final db = await instance.database;
+    return await db.insert('logs', log);
+  }
+
+  Future<List<Map<String, dynamic>>> getAllLogs() async {
+    final db = await instance.database;
+    return await db.query('logs', orderBy: 'id DESC');
+  }
+
+  Future<void> clearLogs() async {
+    final db = await instance.database;
+    await db.delete('logs');
+  }
+
+  Future<void> pruneLogs(int maxCount) async {
+    final db = await instance.database;
+    await db.execute('''
+      DELETE FROM logs WHERE id IN (
+        SELECT id FROM logs ORDER BY id DESC LIMIT -1 OFFSET ?
+      )
+    ''', [maxCount]);
   }
 
   Future<int> insert(Recipe recipe) async {

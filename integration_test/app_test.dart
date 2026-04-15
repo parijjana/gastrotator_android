@@ -24,7 +24,7 @@ void main() {
       // Verify settings screen
       expect(find.text('Settings'), findsOneWidget);
       expect(find.text('Gemini API Key'), findsOneWidget);
-      expect(find.text('Data Management'), findsOneWidget);
+      expect(find.text('Backup & Restore'), findsOneWidget);
 
       // Go back
       await tester.pageBack();

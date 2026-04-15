@@ -3,7 +3,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/youtube_service.dart';
 import '../providers/providers.dart';
-import '../models/recipe.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt;
 
@@ -141,22 +140,22 @@ class _ImportRecipeScreenState extends ConsumerState<ImportRecipeScreen> {
     final localRecipes = ref.watch(recipesProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF5ED),
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Color(0xFFFF8C00)),
+          icon: Icon(Icons.arrow_back_ios, color: Theme.of(context).colorScheme.primary),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           'Import Recipe',
-          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, color: const Color(0xFFFF8C00)),
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.help_outline, color: Color(0xFFFF8C00)),
-            onPressed: () => Navigator.pushNamed(context, '/help', arguments: {'section': 'IMPORT'}),
+            icon: Icon(Icons.help_outline, color: Theme.of(context).colorScheme.primary),
+            onPressed: () => Navigator.pushNamed(context, '/help'),
           ),
         ],
       ),
@@ -174,13 +173,14 @@ class _ImportRecipeScreenState extends ConsumerState<ImportRecipeScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: _urlController,
+              enabled: true,
               decoration: InputDecoration(
                 hintText: 'https://youtube.com/watch?v=...',
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                 suffixIcon: IconButton(
-                  icon: const Icon(Icons.auto_awesome, color: Color(0xFFFF8C00)),
+                  icon: Icon(Icons.auto_awesome, color: Theme.of(context).colorScheme.primary),
                   onPressed: () => _triggerManualImport(_urlController.text),
                 ),
               ),
@@ -190,13 +190,14 @@ class _ImportRecipeScreenState extends ConsumerState<ImportRecipeScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: _searchController,
+              enabled: true,
               decoration: InputDecoration(
                 hintText: 'Search for recipes...',
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                 suffixIcon: IconButton(
-                  icon: const Icon(Icons.search, color: Color(0xFFFF8C00)),
+                  icon: Icon(Icons.search, color: Theme.of(context).colorScheme.primary),
                   onPressed: _searchYouTube,
                 ),
               ),
@@ -204,7 +205,7 @@ class _ImportRecipeScreenState extends ConsumerState<ImportRecipeScreen> {
             ),
             const SizedBox(height: 24),
             if (_isSearching)
-              const Center(child: CircularProgressIndicator(color: Color(0xFFFF8C00)))
+              Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary))
             else
               ListView.builder(
                 shrinkWrap: true,
@@ -261,7 +262,7 @@ class _ImportRecipeScreenState extends ConsumerState<ImportRecipeScreen> {
                                   icon: const Icon(Icons.play_circle_outline, color: Colors.red),
                                   onPressed: () => launchUrl(Uri.parse(video.url)),
                                 ),
-                                const Icon(Icons.add_circle_outline, color: Color(0xFFFF8C00)),
+                                Icon(Icons.add_circle_outline, color: Theme.of(context).colorScheme.primary),
                               ],
                             ),
                           ],

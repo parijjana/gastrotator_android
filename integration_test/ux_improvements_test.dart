@@ -11,6 +11,15 @@ void main() {
       app.main();
       await tester.pumpAndSettle();
 
+      // Ensure kitchen is empty for fallback test
+      if (find.text('French Fries').evaluate().isNotEmpty) {
+        final deleteButton = find.byIcon(Icons.delete_outline).first;
+        await tester.tap(deleteButton);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Delete'));
+        await tester.pumpAndSettle();
+      }
+
       final searchField = find.byType(TextField);
       expect(searchField, findsOneWidget);
 
@@ -29,7 +38,9 @@ void main() {
       final uniqueQuery = 'UnlikelyRecipeNameXYZ123';
       await tester.enterText(searchField, uniqueQuery);
       await tester.pump(); // Start debounce
-      await tester.pump(const Duration(seconds: 2)); // Wait for search
+      await tester.pump(const Duration(seconds: 1)); // Wait for debounce
+      await tester.pump(); // Trigger search
+      await tester.pump(const Duration(seconds: 5)); // Wait for YouTube results
       await tester.pumpAndSettle();
 
       expect(find.text('SUGGESTIONS FROM YOUTUBE'), findsOneWidget, 

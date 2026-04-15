@@ -219,8 +219,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 32),
-                  _buildSectionHeader(context, "VIBE CHECK"),
                   const SizedBox(height: 16),
                   SizedBox(
                     height: 40,
@@ -372,7 +370,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Navigator.pushNamed(context, '/import');
         },
         icon: const Icon(Icons.auto_awesome),
-        label: const Text('AI AI Magic Import'),
+        label: const Text('AI Magic Import'),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
       ),

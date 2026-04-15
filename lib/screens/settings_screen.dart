@@ -117,14 +117,31 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      TextButton.icon(
-                        onPressed: () => launchUrl(Uri.parse("https://aistudio.google.com/app/apikey")),        
-                        icon: const Icon(Icons.open_in_new, size: 16),
-                        label: const Text("Get Your Free Key at Google AI Studio"),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          TextButton.icon(
+                            onPressed: () => launchUrl(Uri.parse("https://aistudio.google.com/app/apikey")),        
+                            icon: const Icon(Icons.open_in_new, size: 16),
+                            label: const Text("Open Studio"),
+                          ),
+                          TextButton.icon(
+                            onPressed: () => Navigator.pushNamed(context, '/help'),
+                            icon: const Icon(Icons.help_outline, size: 16),
+                            label: const Text("Setup Guide"),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                title: const Text("System Logs"),
+                subtitle: const Text("View technical details for troubleshooting."),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.pushNamed(context, '/logs'),
               ),
               const SizedBox(height: 16),
               TextField(

@@ -337,7 +337,16 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
       return;
     }
 
-    final gemini = GeminiService(apiKey: apiKey);
+    final storage = ref.read(secureStorageProvider);
+    final lastModel = await storage.read(key: 'last_successful_model');
+
+    final gemini = GeminiService(
+      apiKey: apiKey,
+      lastSuccessfulModel: lastModel,
+      onModelSuccess: (modelName) async {
+        await storage.write(key: 'last_successful_model', value: modelName);
+      },
+    );
 
     await updateRecipe(recipe.copyWith(importStatus: "Analyzing Language..."));
     final langCode = await gemini.detectLanguage(transcript);
@@ -400,21 +409,34 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
     }
 
     await updateRecipe(recipeWithVal.copyWith(importStatus: "AI Processing..."));
-    final result = await gemini.extractRecipeFromContent(
-      title: recipeWithVal.youtubeTitle ?? recipeWithVal.dishName,
-      channel: recipeWithVal.youtubeChannel ?? "Unknown",
-      url: recipeWithVal.youtubeUrl!,
-      thumbnail: recipeWithVal.thumbnailUrl,
-      transcript: finalInputText,
-    );
+    try {
+      final result = await gemini.extractRecipeFromContent(
+        title: recipeWithVal.youtubeTitle ?? recipeWithVal.dishName,
+        channel: recipeWithVal.youtubeChannel ?? "Unknown",
+        url: recipeWithVal.youtubeUrl!,
+        thumbnail: recipeWithVal.thumbnailUrl,
+        transcript: finalInputText,
+      );
 
-    if (result != null) {
-      await updateRecipe(result.copyWith(
-        id: recipeWithVal.id,
-        importStatus: "Completed",
-        validationResult: valResult, 
-      ));
-    } else {
+      if (result != null) {
+        await updateRecipe(result.copyWith(
+          id: recipeWithVal.id,
+          importStatus: "Completed",
+          validationResult: valResult, 
+        ));
+      } else {
+        await updateRecipe(recipeWithVal.copyWith(importStatus: "Failed: Gemini"));
+      }
+    } on TranscriptFetchError catch (e) {
+      if (e == TranscriptFetchError.apiLimitReached) {
+        await updateRecipe(recipeWithVal.copyWith(
+          importStatus: "No transcript found",
+          transcriptError: TranscriptFetchError.apiLimitReached,
+        ));
+      } else {
+        await updateRecipe(recipeWithVal.copyWith(importStatus: "Failed: Gemini"));
+      }
+    } catch (e) {
       await updateRecipe(recipeWithVal.copyWith(importStatus: "Failed: Gemini"));
     }
   }

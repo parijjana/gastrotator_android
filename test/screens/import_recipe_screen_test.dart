@@ -21,8 +21,8 @@ void main() {
       );
 
       expect(find.text('Import Recipe'), findsOneWidget);
-      expect(find.text('Paste YouTube URL'), findsOneWidget);
-      expect(find.text('Search YouTube'), findsOneWidget);
+      expect(find.text('Paste Video URL'), findsOneWidget);
+      expect(find.text('Search Videos'), findsOneWidget);
       expect(find.byType(TextField), findsNWidgets(2));
     });
 
@@ -37,7 +37,7 @@ void main() {
 
       // Trigger import
       await tester.enterText(find.byType(TextField).first, 'https://youtube.com/watch?v=abc');
-      await tester.tap(find.byIcon(Icons.add_circle));
+      await tester.tap(find.byIcon(Icons.auto_awesome));
       
       // Verification: Ensure no immediate crashes
       await tester.pump();
