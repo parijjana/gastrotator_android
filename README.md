@@ -8,12 +8,13 @@ GastRotator is a local-first, privacy-centric Android application built with Flu
 
 ## Key Features (V1)
 
-- **Magic YouTube Import:** Simply share a cooking video from YouTube. The app fetches the transcript and uses **Gemini 2.x Flash** to generate a structured recipe.
+- **Magic YouTube Import:** Simply share a cooking video from YouTube. The app fetches the transcript and uses **Gemini AI** to generate a structured recipe.
 - **Nutritional Intelligence:** Automatically estimates Total Calories, kcal/100g, and total dish weight in **SI Units (grams)**.
 - **Local-First Architecture:** Your recipes, transcripts, and API keys stay on your device. Powered by **SQLite** and **Encrypted Shared Preferences**.
 - **Kinetic Feast UI:** A bold, editorial-style interface designed for active cooking with asymmetric layouts and high-impact typography.
 - **Smart Conversions:** Built-in volume-to-weight utility (e.g., automatically converting "1 tsp" to grams for consistent database entries).
 - **Data Portability:** Full JSON Export/Import support for backing up your culinary collection.
+- **System Logs & Sharing:** Built-in persistent logging with a 500-entry limit and easy log sharing for troubleshooting.
 
 ---
 
