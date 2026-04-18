@@ -1,8 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:android_app/services/gemini_service.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   late GeminiService geminiService;
+
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
 
   setUp(() {
     geminiService = GeminiService(apiKey: 'test_key');
@@ -22,7 +28,13 @@ void main() {
   "cooking_time": "45 mins"
 }
 ''';
-      final recipe = geminiService.parseRecipe(jsonText, 'Title', 'Channel', 'URL', 'thumb');
+      final recipe = geminiService.parseRecipe(
+        jsonText,
+        'Title',
+        'Channel',
+        'URL',
+        'thumb',
+      );
 
       expect(recipe, isNotNull);
       expect(recipe!.dishName, 'Butter Chicken');
@@ -31,8 +43,15 @@ void main() {
     });
 
     test('parseRecipe should handle markdown blocks correctly', () {
-      const jsonText = '```json\n{"dish_name": "Salad", "category": "Lunch", "ingredients": "Lettuce", "recipe": "Mix it."}\n```';
-      final recipe = geminiService.parseRecipe(jsonText, 'Title', 'Channel', 'URL', 'thumb');
+      const jsonText =
+          '```json\n{"dish_name": "Salad", "category": "Lunch", "ingredients": "Lettuce", "recipe": "Mix it."}\n```';
+      final recipe = geminiService.parseRecipe(
+        jsonText,
+        'Title',
+        'Channel',
+        'URL',
+        'thumb',
+      );
 
       expect(recipe, isNotNull);
       expect(recipe!.dishName, 'Salad');
@@ -40,7 +59,13 @@ void main() {
 
     test('parseRecipe should return null on invalid JSON', () {
       const jsonText = 'invalid json';
-      final recipe = geminiService.parseRecipe(jsonText, 'Title', 'Channel', 'URL', 'thumb');
+      final recipe = geminiService.parseRecipe(
+        jsonText,
+        'Title',
+        'Channel',
+        'URL',
+        'thumb',
+      );
 
       expect(recipe, isNull);
     });

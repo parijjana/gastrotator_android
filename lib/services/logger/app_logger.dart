@@ -9,12 +9,14 @@ class LogEntry {
   final LogLevel level;
   final String message;
   final String? technicalDetails;
+  final String? contextId;
 
   LogEntry({
     required this.timestamp,
     required this.level,
     required this.message,
     this.technicalDetails,
+    this.contextId,
   });
 
   Map<String, dynamic> toMap() {
@@ -23,6 +25,7 @@ class LogEntry {
       'level': level.name,
       'message': message,
       'technical_details': technicalDetails,
+      'context_id': contextId,
     };
   }
 
@@ -32,6 +35,7 @@ class LogEntry {
       level: LogLevel.values.firstWhere((e) => e.name == map['level']),
       message: map['message'],
       technicalDetails: map['technical_details'],
+      contextId: map['context_id'],
     );
   }
 }
@@ -50,18 +54,31 @@ class AppLogger extends ChangeNotifier {
   Future<void> init() async {
     if (_isInitialized) return;
     final dbLogs = await DatabaseHelper.instance.getAllLogs();
+    _logs.clear();
     _logs.addAll(dbLogs.map((m) => LogEntry.fromMap(m)));
     _isInitialized = true;
     notifyListeners();
   }
 
-  void log(String message, {LogLevel level = LogLevel.info, String? details, String? apiKeyToMask}) {
+  void log(
+    String message, {
+    LogLevel level = LogLevel.info,
+    String? details,
+    String? apiKeyToMask,
+    String? contextId,
+  }) {
     String sanitizedMessage = message;
     String? sanitizedDetails = details;
 
     if (apiKeyToMask != null && apiKeyToMask.isNotEmpty) {
-      sanitizedMessage = sanitizedMessage.replaceAll(apiKeyToMask, '***API_KEY_MASKED***');
-      sanitizedDetails = sanitizedDetails?.replaceAll(apiKeyToMask, '***API_KEY_MASKED***');
+      sanitizedMessage = sanitizedMessage.replaceAll(
+        apiKeyToMask,
+        '***API_KEY_MASKED***',
+      );
+      sanitizedDetails = sanitizedDetails?.replaceAll(
+        apiKeyToMask,
+        '***API_KEY_MASKED***',
+      );
     }
 
     final entry = LogEntry(
@@ -69,37 +86,61 @@ class AppLogger extends ChangeNotifier {
       level: level,
       message: sanitizedMessage,
       technicalDetails: sanitizedDetails,
+      contextId: contextId,
     );
 
     _logs.insert(0, entry);
     if (_logs.length > _maxLogs) {
       _logs.removeLast();
     }
-    
+
     // Fire and forget database operations
     _persistLog(entry);
-    
-    debugPrint('[${entry.level.name.toUpperCase()}] ${entry.message}');
+
+    debugPrint('[${entry.level.name.toUpperCase()}] ${entry.message} ${contextId != null ? "($contextId)" : ""}');
     notifyListeners();
   }
 
   Future<void> _persistLog(LogEntry entry) async {
-    await DatabaseHelper.instance.insertLog(entry.toMap());
-    await DatabaseHelper.instance.pruneLogs(_maxLogs);
+    try {
+      await DatabaseHelper.instance.insertLog(entry.toMap());
+      await DatabaseHelper.instance.pruneLogs(_maxLogs);
+    } catch (e) {
+      debugPrint("Log Persistence Warning: $e");
+    }
   }
 
-  void info(String message, {String? details, String? apiKeyToMask}) => 
-      log(message, level: LogLevel.info, details: details, apiKeyToMask: apiKeyToMask);
-  
-  void warn(String message, {String? details, String? apiKeyToMask}) => 
-      log(message, level: LogLevel.warning, details: details, apiKeyToMask: apiKeyToMask);
-  
-  void error(String message, {String? details, String? apiKeyToMask}) => 
-      log(message, level: LogLevel.error, details: details, apiKeyToMask: apiKeyToMask);
+  void info(String message, {String? details, String? apiKeyToMask, String? contextId}) => log(
+    message,
+    level: LogLevel.info,
+    details: details,
+    apiKeyToMask: apiKeyToMask,
+    contextId: contextId,
+  );
 
-  void clear() {
+  void warn(String message, {String? details, String? apiKeyToMask, String? contextId}) => log(
+    message,
+    level: LogLevel.warning,
+    details: details,
+    apiKeyToMask: apiKeyToMask,
+    contextId: contextId,
+  );
+
+  void error(String message, {String? details, String? apiKeyToMask, String? contextId}) => log(
+    message,
+    level: LogLevel.error,
+    details: details,
+    apiKeyToMask: apiKeyToMask,
+    contextId: contextId,
+  );
+
+  void clear() async {
     _logs.clear();
-    DatabaseHelper.instance.clearLogs();
+    try {
+      await DatabaseHelper.instance.clearLogs();
+    } catch (e) {
+      debugPrint("Log Clear Warning: $e");
+    }
     notifyListeners();
   }
 }

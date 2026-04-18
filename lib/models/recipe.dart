@@ -18,13 +18,14 @@ class Recipe {
   final String? cookingTime;
   final String? transcript;
   final String? importStatus;
-  final String? flavorProfile; 
-  final double? rating;        
+  final String? flavorProfile;
+  final double? rating;
   final String? notes;
   final TranscriptFetchError transcriptError;
   final double? durationSeconds;
   final List<Map<String, dynamic>>? segments;
   final ValidationResult validationResult;
+  final int? queuePosition;
 
   Recipe({
     this.id,
@@ -49,6 +50,7 @@ class Recipe {
     this.durationSeconds,
     this.segments,
     this.validationResult = ValidationResult.valid,
+    this.queuePosition,
   });
 
   Map<String, dynamic> toMap() {
@@ -73,6 +75,7 @@ class Recipe {
       'notes': notes,
       'transcript_error': transcriptError.name,
       'validation_result': validationResult.name,
+      'queue_position': queuePosition,
     };
   }
 
@@ -104,6 +107,7 @@ class Recipe {
         (e) => e.name == (map['validation_result'] ?? 'valid'),
         orElse: () => ValidationResult.valid,
       ),
+      queuePosition: map['queue_position'],
     );
   }
 
@@ -116,10 +120,23 @@ class Recipe {
 
   static String getLanguageName(String code) {
     final map = {
-      'en': 'English', 'hi': 'Hindi', 'bn': 'Bengali', 'ta': 'Tamil',
-      'te': 'Telugu', 'mr': 'Marathi', 'gu': 'Gujarati', 'kn': 'Kannada',
-      'ml': 'Malayalam', 'pa': 'Punjabi', 'es': 'Spanish', 'fr': 'French',
-      'de': 'German', 'it': 'Italian', 'ja': 'Japanese', 'ko': 'Korean', 'zh': 'Chinese',
+      'en': 'English',
+      'hi': 'Hindi',
+      'bn': 'Bengali',
+      'ta': 'Tamil',
+      'te': 'Telugu',
+      'mr': 'Marathi',
+      'gu': 'Gujarati',
+      'kn': 'Kannada',
+      'ml': 'Malayalam',
+      'pa': 'Punjabi',
+      'es': 'Spanish',
+      'fr': 'French',
+      'de': 'German',
+      'it': 'Italian',
+      'ja': 'Japanese',
+      'ko': 'Korean',
+      'zh': 'Chinese',
     };
     return map[code.toLowerCase()] ?? code.toUpperCase();
   }
@@ -147,6 +164,7 @@ class Recipe {
     double? durationSeconds,
     List<Map<String, dynamic>>? segments,
     ValidationResult? validationResult,
+    int? queuePosition,
   }) {
     return Recipe(
       id: id ?? this.id,
@@ -171,6 +189,7 @@ class Recipe {
       durationSeconds: durationSeconds ?? this.durationSeconds,
       segments: segments ?? this.segments,
       validationResult: validationResult ?? this.validationResult,
+      queuePosition: queuePosition ?? this.queuePosition,
     );
   }
 }

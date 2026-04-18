@@ -7,10 +7,7 @@ void main() {
     const videoId = '3iNyUwPKrXQ'; // Joshua Weissman's Peri Peri Chicken
 
     try {
-      final transcript = await api.fetch(
-        videoId,
-        languages: ['en'],
-      );
+      final transcript = await api.fetch(videoId, languages: ['en']);
 
       expect(transcript.videoId, equals(videoId));
       expect(transcript.snippets, isNotEmpty);

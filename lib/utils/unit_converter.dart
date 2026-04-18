@@ -14,20 +14,23 @@ class UnitConverter {
   static String convertString(String text) {
     // Regex to match patterns like "1 1/2 tsp", "2 tbsp", "0.5 cup"
     // Handles whole numbers, decimals, and simple fractions
-    final regex = RegExp(r'(\d+[\s\d/.]*)\s*(tsp|teaspoon|tbsp|tablespoon|cup|oz|ounce|lb|pound)s?\b', caseSensitive: false);
-    
+    final regex = RegExp(
+      r'(\d+[\s\d/.]*)\s*(tsp|teaspoon|tbsp|tablespoon|cup|oz|ounce|lb|pound)s?\b',
+      caseSensitive: false,
+    );
+
     return text.replaceAllMapped(regex, (match) {
       final quantityStr = match.group(1)!.trim();
       final unit = match.group(2)!.toLowerCase();
-      
+
       final quantity = _parseQuantity(quantityStr);
       final multiplier = _conversions[unit] ?? 0.0;
-      
+
       if (quantity > 0 && multiplier > 0) {
         final grams = (quantity * multiplier).toStringAsFixed(0);
         return "${match.group(0)} ($grams g)";
       }
-      
+
       return match.group(0)!;
     });
   }

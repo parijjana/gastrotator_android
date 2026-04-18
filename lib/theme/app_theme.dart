@@ -5,52 +5,49 @@ import 'package:google_fonts/google_fonts.dart';
 /// DO NOT REGRESS: Primary #944A00, Surface #FCF9F8.
 /// Headlines must use Noto Serif, Body must use Manrope.
 class AppTheme {
-  static ThemeData get vibrantTheme {
+  static ThemeData light(Color primaryColor) => _base(primaryColor, Brightness.light);
+  static ThemeData dark(Color primaryColor) => _base(primaryColor, Brightness.dark);
+
+  static ThemeData _base(Color primaryColor, Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
+    
     return ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xFF944A00),
-        brightness: Brightness.light,
-        primary: const Color(0xFF944A00), // Culinary Curator "Heat Signature"
+        seedColor: primaryColor,
+        brightness: brightness,
+        primary: primaryColor,
         onPrimary: Colors.white,
-        secondary: const Color(0xFF4E6073),
-        tertiary: const Color(0xFF3B3B3B),
-        surface: const Color(0xFFFCF9F8),
-        onSurface: const Color(0xFF1C1B1B),
-        surfaceContainerLowest: Colors.white,
-        surfaceContainerLow: const Color(0xFFF6F3F2),
-        surfaceContainer: const Color(0xFFF0EDEC),
-        surfaceContainerHigh: const Color(0xFFEBE7E7),
-        surfaceContainerHighest: const Color(0xFFE5E2E1),
+        surface: isDark ? const Color(0xFF1C1B1B) : const Color(0xFFFCF9F8),
+        onSurface: isDark ? const Color(0xFFFCF9F8) : const Color(0xFF1C1B1B),
       ),
       textTheme: TextTheme(
-        // High-impact Editorial Masthead
         displayMedium: GoogleFonts.notoSerif(
           fontSize: 32,
           fontWeight: FontWeight.w900,
-          color: const Color(0xFF1C1B1B),
           letterSpacing: -0.5,
           height: 1.1,
+        ),
+        headlineMedium: GoogleFonts.notoSerif(
+          fontSize: 28,
+          fontWeight: FontWeight.w900,
+          height: 1.1,
+          letterSpacing: -0.5,
         ),
         headlineLarge: GoogleFonts.notoSerif(
           fontSize: 24,
           fontWeight: FontWeight.bold,
-          color: const Color(0xFF1C1B1B),
         ),
         titleLarge: GoogleFonts.notoSerif(
           fontSize: 20,
           fontWeight: FontWeight.bold,
-          color: const Color(0xFF1C1B1B),
         ),
-        // Instructional Body Text
         bodyLarge: GoogleFonts.manrope(
           fontSize: 16,
-          color: const Color(0xFF1C1B1B),
           height: 1.6,
         ),
         bodyMedium: GoogleFonts.manrope(
           fontSize: 14,
-          color: const Color(0xFF1C1B1B),
           height: 1.5,
         ),
         labelLarge: GoogleFonts.manrope(
@@ -58,29 +55,29 @@ class AppTheme {
           fontWeight: FontWeight.bold,
           letterSpacing: 1.5,
         ),
-        labelSmall: GoogleFonts.manrope(
-          fontSize: 11,
-          color: const Color(0xFF474747),
-          letterSpacing: 1.2,
-        ),
       ),
       cardTheme: CardThemeData(
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        color: Colors.white,
+        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF944A00),
+          backgroundColor: primaryColor,
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)), // Sharp radius
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(4),
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-          textStyle: GoogleFonts.manrope(fontWeight: FontWeight.bold, letterSpacing: 1),
+          textStyle: GoogleFonts.manrope(
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1,
+          ),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: Colors.white,
+        fillColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: Color(0xFFC6C6C6), width: 0.5),
@@ -91,10 +88,13 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFF944A00), width: 1.5),
+          borderSide: BorderSide(color: primaryColor, width: 1.5),
         ),
         hintStyle: GoogleFonts.manrope(color: Colors.grey[400]),
       ),
     );
   }
+
+  // Legacy getter for backward compatibility if needed
+  static ThemeData get vibrantTheme => light(const Color(0xFF944A00));
 }

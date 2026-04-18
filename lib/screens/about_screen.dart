@@ -14,6 +14,8 @@ class AboutScreen extends StatelessWidget {
         title: const Text('About'),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        automaticallyImplyLeading: false,
+        centerTitle: true,
       ),
       body: FutureBuilder<PackageInfo>(
         future: PackageInfo.fromPlatform(),
@@ -33,7 +35,11 @@ class AboutScreen extends StatelessWidget {
                     color: Theme.of(context).colorScheme.primary,
                     borderRadius: BorderRadius.circular(28),
                   ),
-                  child: const Icon(Icons.restaurant_menu, size: 50, color: Colors.white),
+                  child: const Icon(
+                    Icons.restaurant_menu,
+                    size: 50,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(height: 24),
                 Text(
@@ -67,96 +73,97 @@ class AboutScreen extends StatelessWidget {
                   'https://github.com/parijjana/gastrotator_android/issues',
                   Icons.bug_report_outlined,
                 ),
-                
+
                 const SizedBox(height: 48),
                 _buildSectionHeader(context, "FUTURE HORIZONS (ROADMAP)"),
                 const SizedBox(height: 16),
                 _buildRoadmapCard(
-                  context, 
-                  "v2: The Cognitive Kitchen", 
+                  context,
+                  "v2: The Cognitive Kitchen",
                   "Phase 3 & 4 - High Priority",
                   [
                     RoadmapItem(
-                      "Kinetic Weekly Planner", 
-                      "Zero-waste meal scheduling that optimizes ingredients across your week."
+                      "Kinetic Weekly Planner",
+                      "Zero-waste meal scheduling that optimizes ingredients across your week.",
                     ),
                     RoadmapItem(
-                      "Intelligent Delta Grocery Lists", 
-                      "Auto-generate shopping lists by comparing recipes to your current pantry."
+                      "Intelligent Delta Grocery Lists",
+                      "Auto-generate shopping lists by comparing recipes to your current pantry.",
                     ),
                     RoadmapItem(
-                      "Iteration Tracking", 
-                      "Log and rate your cooking attempts to track your progress and improvements."
+                      "Iteration Tracking",
+                      "Log and rate your cooking attempts to track your progress and improvements.",
                     ),
                     RoadmapItem(
-                      "Pantry-to-Plate", 
-                      "Vision-powered recognition to suggest recipes based on ingredients in your fridge."
+                      "Pantry-to-Plate",
+                      "Vision-powered recognition to suggest recipes based on ingredients in your fridge.",
                     ),
                     RoadmapItem(
-                      "AI Ingredient Substitute Engine", 
-                      "Smart, chemistry-based swaps for when you're missing a key ingredient."
+                      "AI Ingredient Substitute Engine",
+                      "Smart, chemistry-based swaps for when you're missing a key ingredient.",
                     ),
                     RoadmapItem(
-                      "A/B Testing", 
-                      "Save and compare multiple versions of the same recipe side-by-side."
+                      "A/B Testing",
+                      "Save and compare multiple versions of the same recipe side-by-side.",
                     ),
                     RoadmapItem(
-                      "Global Flavor Translation", 
-                      "Instant conversion of regional measurements (g vs oz) and terminology."
+                      "Global Flavor Translation",
+                      "Instant conversion of regional measurements (g vs oz) and terminology.",
                     ),
                     RoadmapItem(
-                      "Automated Nutrition Labeling", 
-                      "Full macro-nutrient breakdown for every custom recipe you import."
+                      "Automated Nutrition Labeling",
+                      "Full macro-nutrient breakdown for every custom recipe you import.",
                     ),
                     RoadmapItem(
-                      "Multi-Step Timer Management", 
-                      "Context-aware timers that sync with your specific cooking progress."
+                      "Multi-Step Timer Management",
+                      "Context-aware timers that sync with your specific cooking progress.",
                     ),
                     RoadmapItem(
-                      "Inventory Management", 
-                      "Real-time alerts before your essential ingredients run low or expire."
+                      "Inventory Management",
+                      "Real-time alerts before your essential ingredients run low or expire.",
                     ),
                   ],
                   Colors.orangeAccent,
                 ),
                 const SizedBox(height: 16),
                 _buildRoadmapCard(
-                  context, 
-                  "v3: Future Connectivity", 
+                  context,
+                  "v3: Future Connectivity",
                   "Phase 5 - Long Term",
                   [
                     RoadmapItem(
-                      "Structured Recipe Beaming", 
-                      "Send perfectly formatted, interactive recipes to friends with a single tap."
+                      "Structured Recipe Beaming",
+                      "Send perfectly formatted, interactive recipes to friends with a single tap.",
                     ),
                     RoadmapItem(
-                      "Oral Tradition (Voice-to-Recipe)", 
-                      "Dictate family secret recipes directly into the app for instant structuring."
+                      "Oral Tradition (Voice-to-Recipe)",
+                      "Dictate family secret recipes directly into the app for instant structuring.",
                     ),
                     RoadmapItem(
-                      "Hands-Free Kitchen Assistant", 
-                      "Voice control for scrolling and timer management while your hands are messy."
+                      "Hands-Free Kitchen Assistant",
+                      "Voice control for scrolling and timer management while your hands are messy.",
                     ),
                     RoadmapItem(
-                      "Decentralized Multi-Device Sync", 
-                      "Keep your data in sync across all devices without a central server."
+                      "Decentralized Multi-Device Sync",
+                      "Keep your data in sync across all devices without a central server.",
                     ),
                     RoadmapItem(
-                      "Smart Appliance Integration", 
-                      "Sync temperatures and timers directly with compatible smart ovens."
+                      "Smart Appliance Integration",
+                      "Sync temperatures and timers directly with compatible smart ovens.",
                     ),
                     RoadmapItem(
-                      "Dynamic Serving Scaling", 
-                      "Instantly recalculate ingredient quantities for any number of guests."
+                      "Dynamic Serving Scaling",
+                      "Instantly recalculate ingredient quantities for any number of guests.",
                     ),
                   ],
                   Colors.blueAccent,
                 ),
 
                 const SizedBox(height: 48),
-                ],
-                ),
-                );        },
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -175,7 +182,13 @@ class AboutScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildRoadmapCard(BuildContext context, String title, String subtitle, List<RoadmapItem> items, Color accent) {
+  Widget _buildRoadmapCard(
+    BuildContext context,
+    String title,
+    String subtitle,
+    List<RoadmapItem> items,
+    Color accent,
+  ) {
     return Card(
       elevation: 0,
       color: accent.withOpacity(0.05),
@@ -192,41 +205,79 @@ class AboutScreen extends StatelessWidget {
               children: [
                 Icon(Icons.rocket_launch, size: 18, color: accent),
                 const SizedBox(width: 8),
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 4),
-            Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.bold)),
-            const SizedBox(height: 16),
-            ...items.map((item) => Padding(
-              padding: const EdgeInsets.only(bottom: 12.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
-                    child: Text("• ", style: TextStyle(color: accent, fontWeight: FontWeight.bold)),
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                        const SizedBox(height: 2),
-                        Text(item.description, style: TextStyle(fontSize: 13, color: Colors.grey[700])),
-                      ],
-                    ),
-                  ),
-                ],
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.bold,
               ),
-            )),
+            ),
+            const SizedBox(height: 16),
+            ...items.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 12.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Text(
+                        "• ",
+                        style: TextStyle(
+                          color: accent,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            item.description,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildLink(BuildContext context, String label, String url, IconData icon) {
+  Widget _buildLink(
+    BuildContext context,
+    String label,
+    String url,
+    IconData icon,
+  ) {
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton.icon(
@@ -235,7 +286,9 @@ class AboutScreen extends StatelessWidget {
         label: Text(label),
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
         ),
       ),
     );

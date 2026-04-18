@@ -7,51 +7,33 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   group('Navigation Test', () {
-    testWidgets('Verify FAB navigates to Import Screen', (tester) async {
+    testWidgets('Verify Bottom Navigation: Kitchen, Settings, About', (tester) async {
       app.main();
       await tester.pumpAndSettle();
 
-      // 1. Verify Home Screen
+      // 1. Verify Home Screen (Kitchen)
       expect(find.text('GastRotator'), findsOneWidget);
+      expect(find.text('Kitchen'), findsOneWidget);
 
-      // 2. Tap FAB
-      final fab = find.byType(FloatingActionButton);
-      expect(fab, findsOneWidget);
-      await tester.tap(fab);
+      // 2. Tap Settings Tab
+      final settingsTab = find.text('Settings');
+      expect(settingsTab, findsOneWidget);
+      await tester.tap(settingsTab);
       await tester.pumpAndSettle();
 
-      // 3. Verify Import Screen
-      expect(find.text('Import Recipe'), findsOneWidget);
-      print("Success: FAB navigation verified!");
-    });
-
-    testWidgets('Verify Settings and About navigation', (tester) async {
-      app.main();
-      await tester.pumpAndSettle();
-
-      // 1. Tap Settings Icon from Home
-      final settingsBtn = find.byIcon(Icons.settings_outlined);
-      expect(settingsBtn, findsOneWidget);
-      await tester.tap(settingsBtn);
-      await tester.pumpAndSettle();
-
-      // 2. Verify Settings Screen
+      // 3. Verify Settings Screen
       expect(find.text('Settings'), findsOneWidget);
-      
-      // 3. Navigate to About from Settings
-      final aboutTile = find.text('About GastRotator Fresh');
-      await tester.scrollUntilVisible(
-        aboutTile, 
-        500.0,
-        scrollable: find.byType(Scrollable).last,
-      );
-      expect(aboutTile, findsOneWidget);
-      await tester.tap(aboutTile);
+      expect(find.text('Gemini API Key'), findsOneWidget);
+
+      // 4. Tap About Tab
+      final aboutTab = find.text('About');
+      expect(aboutTab, findsOneWidget);
+      await tester.tap(aboutTab);
       await tester.pumpAndSettle();
-      
-      // 4. Verify About Screen
+
+      // 5. Verify About Screen
       expect(find.text('About'), findsOneWidget);
-      print("Success: Settings and About navigation verified!");
+      expect(find.text('GastRotator'), findsWidgets); // Title and version text
     });
   });
 }

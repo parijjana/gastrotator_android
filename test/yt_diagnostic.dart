@@ -4,7 +4,7 @@ import 'dart:io';
 void main() async {
   final yt = YoutubeExplode();
   const videoUrl = 'https://www.youtube.com/watch?v=3iNyUwPKrXQ';
-  
+
   print('--- YouTube Diagnostic Start ---');
   print('Target URL: $videoUrl');
 
@@ -19,12 +19,12 @@ void main() async {
     try {
       final manifest = await yt.videos.closedCaptions.getManifest(video.id);
       print('Manifest Tracks Found: ${manifest.tracks.length}');
-      
+
       if (manifest.tracks.isNotEmpty) {
         for (var track in manifest.tracks) {
           print(' - ${track.language.name} (${track.language.code})');
         }
-        
+
         print('\n3. Attempting to fetch first track content...');
         final track = await yt.videos.closedCaptions.get(manifest.tracks.first);
         print('Captions count: ${track.captions.length}');
@@ -36,14 +36,17 @@ void main() async {
       print('\n!!! CAPTION MANIFEST FAILURE !!!');
       print('Error Type: ${e.runtimeType}');
       print('Error Message: $e');
-      
+
       if (e.toString().contains('XmlParserException')) {
-        print('\nANALYSIS: "Expected a single root element at 1:1" usually indicates that');
-        print('the server returned an HTML error page (like a 404, 403, or bot check)');
+        print(
+          '\nANALYSIS: "Expected a single root element at 1:1" usually indicates that',
+        );
+        print(
+          'the server returned an HTML error page (like a 404, 403, or bot check)',
+        );
         print('instead of the expected XML data structure.');
       }
     }
-
   } catch (e) {
     print('General Error: $e');
   } finally {

@@ -21,10 +21,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    final currentKey = ref.read(apiKeyProvider);
-    if (currentKey != null) {
-      _apiKeyController.text = currentKey;
-    }
+    // Initialize controller with current state if available
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final keyState = ref.read(apiKeyProvider);
+      if (keyState.hasValue && keyState.value != null) {
+        _apiKeyController.text = keyState.value!;
+      }
+    });
+
     _apiKeyController.addListener(() {
       if (mounted) setState(() {});
     });
@@ -42,16 +46,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final jsonData = await ref.read(recipesProvider.notifier).exportRecipes();
       final directory = await getTemporaryDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final tempFile = File("${directory.path}/gastrotator_backup_$timestamp.json");
+      final tempFile = File(
+        "${directory.path}/gastrotator_backup_$timestamp.json",
+      );
       await tempFile.writeAsString(jsonData);
 
-      await Share.shareXFiles(
-        [XFile(tempFile.path)],
-        subject: 'GastRotator Recipe Backup',
-      );
+      await Share.shareXFiles([
+        XFile(tempFile.path),
+      ], subject: 'GastRotator Recipe Backup');
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export failed: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
       }
     } finally {
       if (mounted) setState(() => _isProcessing = false);
@@ -64,19 +71,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['json'],
-        withData: true, 
+        withData: true,
       );
 
       if (result != null && result.files.single.bytes != null) {
         final jsonString = String.fromCharCodes(result.files.single.bytes!);
         await ref.read(recipesProvider.notifier).importRecipes(jsonString);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Collection imported successfully!')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Collection imported successfully!')),
+          );
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Import failed: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Import failed: $e')));
       }
     } finally {
       if (mounted) setState(() => _isProcessing = false);
@@ -86,16 +97,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final themeSettings = ref.watch(themeProvider);
+    final apiKeyAsync = ref.watch(apiKeyProvider);
+
+    // Update controller if the async value changes (e.g. after eager load finishes)
+    ref.listen<AsyncValue<String?>>(apiKeyProvider, (prev, next) {
+      if (next.hasValue && next.value != _apiKeyController.text) {
+        _apiKeyController.text = next.value ?? "";
+      }
+    });
 
     return Stack(
       children: [
         Scaffold(
-          backgroundColor: themeSettings.brightness == Brightness.light ? const Color(0xFFFFF5ED) : null,
+          backgroundColor: themeSettings.brightness == Brightness.light
+              ? const Color(0xFFFFF5ED)
+              : null,
           appBar: AppBar(
-            title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.bold)),
+            title: const Text(
+              'Settings',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             centerTitle: true,
             backgroundColor: Colors.transparent,
             elevation: 0,
+            automaticallyImplyLeading: false,
           ),
           body: ListView(
             padding: const EdgeInsets.all(24.0),
@@ -104,16 +129,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 16),
               Card(
                 color: themeSettings.primaryColor.withOpacity(0.05),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: themeSettings.primaryColor.withOpacity(0.2))),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(
+                    color: themeSettings.primaryColor.withOpacity(0.2),
+                  ),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.info_outline, color: themeSettings.primaryColor),
+                          Icon(
+                            Icons.info_outline,
+                            color: themeSettings.primaryColor,
+                          ),
                           const SizedBox(width: 12),
-                          const Expanded(child: Text("Recipe extraction requires a free Google Gemini API Key.", style: TextStyle(fontWeight: FontWeight.bold))),
+                          const Expanded(
+                            child: Text(
+                              "Recipe extraction requires a free Google Gemini API Key.",
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -121,12 +159,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
                           TextButton.icon(
-                            onPressed: () => launchUrl(Uri.parse("https://aistudio.google.com/app/apikey")),        
+                            onPressed: () => launchUrl(
+                              Uri.parse(
+                                "https://aistudio.google.com/app/apikey",
+                              ),
+                            ),
                             icon: const Icon(Icons.open_in_new, size: 16),
                             label: const Text("Open Studio"),
                           ),
                           TextButton.icon(
-                            onPressed: () => Navigator.pushNamed(context, '/help'),
+                            onPressed: () =>
+                                Navigator.pushNamed(context, '/help'),
                             icon: const Icon(Icons.help_outline, size: 16),
                             label: const Text("Setup Guide"),
                           ),
@@ -139,7 +182,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 16),
               ListTile(
                 title: const Text("System Logs"),
-                subtitle: const Text("View technical details for troubleshooting."),
+                subtitle: const Text(
+                  "View technical details for troubleshooting.",
+                ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.pushNamed(context, '/logs'),
               ),
@@ -147,29 +192,52 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               TextField(
                 controller: _apiKeyController,
                 obscureText: true,
+                enabled: !apiKeyAsync.isLoading,
                 decoration: InputDecoration(
-                  hintText: 'Enter your API key',
+                  hintText: apiKeyAsync.isLoading
+                      ? 'Loading key...'
+                      : 'Enter your API key',
                   filled: true,
                   fillColor: Colors.white,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
+                  ),
                   suffixIcon: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (_apiKeyController.text.isNotEmpty)
                         IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            color: Colors.red,
+                          ),
                           onPressed: () {
                             ref.read(apiKeyProvider.notifier).deleteKey();
                             _apiKeyController.clear();
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('API Key removed.')));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('API Key removed.')),
+                            );
                           },
                         ),
                       IconButton(
-                        icon: const Icon(Icons.save),
-                        onPressed: () {
-                          ref.read(apiKeyProvider.notifier).saveKey(_apiKeyController.text);
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('API Key saved securely.')));
-                        },
+                        icon: Icon(
+                          apiKeyAsync.isLoading
+                              ? Icons.hourglass_empty
+                              : Icons.save,
+                        ),
+                        onPressed: apiKeyAsync.isLoading
+                            ? null
+                            : () {
+                                ref
+                                    .read(apiKeyProvider.notifier)
+                                    .saveKey(_apiKeyController.text);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('API Key saved securely.'),
+                                  ),
+                                );
+                              },
                       ),
                     ],
                   ),
@@ -180,7 +248,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 16),
               ListTile(
                 tileColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 leading: const Icon(Icons.download, color: Colors.blue),
                 title: const Text("Export Collection"),
                 subtitle: const Text("Save your recipes to a JSON file"),
@@ -189,7 +259,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 12),
               ListTile(
                 tileColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 leading: const Icon(Icons.upload, color: Colors.green),
                 title: const Text("Import Collection"),
                 subtitle: const Text("Restore recipes from a backup file"),
@@ -200,12 +272,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 16),
               _buildThemeSelector(context, ref, themeSettings),
               const SizedBox(height: 40),
-              Center(
-                child: TextButton(
-                  onPressed: () => Navigator.pushNamed(context, '/about'),
-                  child: const Text("About GastRotator"),
-                ),
-              ),
             ],
           ),
         ),
@@ -219,11 +285,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Widget _buildSectionTitle(BuildContext context, String title) {
-    return Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold));
+    return Text(
+      title,
+      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+    );
   }
 
-  Widget _buildThemeSelector(BuildContext context, WidgetRef ref, ThemeSettings settings) {
-    final colors = [const Color(0xFFFF8C00), Colors.deepPurple, Colors.teal, Colors.blueGrey];
+  Widget _buildThemeSelector(
+    BuildContext context,
+    WidgetRef ref,
+    ThemeSettings settings,
+  ) {
+    final colors = [
+      const Color(0xFFFF8C00),
+      Colors.deepPurple,
+      Colors.teal,
+      Colors.blueGrey,
+    ];
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: colors.map((color) {
@@ -235,7 +313,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             decoration: BoxDecoration(
               color: color,
               shape: BoxShape.circle,
-              border: Border.all(color: settings.primaryColor == color ? Colors.black : Colors.transparent, width: 3),
+              border: Border.all(
+                color: settings.primaryColor == color
+                    ? Colors.black
+                    : Colors.transparent,
+                width: 3,
+              ),
             ),
           ),
         );

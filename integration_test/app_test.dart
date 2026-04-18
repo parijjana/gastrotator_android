@@ -13,12 +13,12 @@ void main() {
 
       // Verify that we are on the home screen
       expect(find.text('GastRotator'), findsOneWidget);
-      expect(find.text('Your kitchen is empty!'), findsOneWidget);
+      expect(find.text('FIND A RECIPE'), findsOneWidget);
 
-      // Navigate to settings
-      final settingsButton = find.byIcon(Icons.settings_outlined);
-      expect(settingsButton, findsOneWidget);
-      await tester.tap(settingsButton);
+      // Navigate to settings via Bottom Nav
+      final settingsTab = find.text('Settings');
+      expect(settingsTab, findsOneWidget);
+      await tester.tap(settingsTab);
       await tester.pumpAndSettle();
 
       // Verify settings screen
@@ -26,8 +26,10 @@ void main() {
       expect(find.text('Gemini API Key'), findsOneWidget);
       expect(find.text('Backup & Restore'), findsOneWidget);
 
-      // Go back
-      await tester.pageBack();
+      // Go back to home
+      final homeTab = find.text('Kitchen');
+      expect(homeTab, findsOneWidget);
+      await tester.tap(homeTab);
       await tester.pumpAndSettle();
 
       // Verify we are back on home screen

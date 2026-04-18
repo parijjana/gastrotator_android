@@ -7,7 +7,9 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   group('Import Workflow Emulator Test', () {
-    testWidgets('Verify manual URL import flow and error handling', (tester) async {
+    testWidgets('Verify manual URL import flow and error handling', (
+      tester,
+    ) async {
       app.main();
       await tester.pumpAndSettle();
 
@@ -22,14 +24,17 @@ void main() {
 
       // 3. Enter the video that was previously failing
       final urlField = find.byType(TextField).first;
-      await tester.enterText(urlField, 'https://www.youtube.com/watch?v=3iNyUwPKrXQ');
+      await tester.enterText(
+        urlField,
+        'https://www.youtube.com/watch?v=3iNyUwPKrXQ',
+      );
       await tester.pumpAndSettle();
 
       // 4. Tap AI Magic Import (now add_circle icon)
       final importButton = find.byIcon(Icons.add_circle);
       await tester.tap(importButton);
       await tester.pumpAndSettle(); // Navigate back to home
-      
+
       // 5. Wait for the status to change to "AI Processing..."
       bool success = false;
       String lastStatus = "None";
@@ -40,25 +45,35 @@ void main() {
           final statusText = (tester.widget<Text>(statusFinder).data ?? "");
           lastStatus = statusText;
           print("DEBUG: Current Status in Emulator: $statusText");
-          if (statusText.contains('AI Processing...') || 
-              statusText.contains('Completed') || 
+          if (statusText.contains('AI Processing...') ||
+              statusText.contains('Completed') ||
               statusText.contains('Failed: Missing API Key')) {
             success = true;
             break;
           }
         }
-        
+
         // If we see an error dialog, fail immediately
         if (find.text('Import Failed').evaluate().isNotEmpty) {
-          final errorText = tester.widget<Text>(find.descendant(
-            of: find.byType(AlertDialog),
-            matching: find.byType(Text),
-          ).last).data;
+          final errorText = tester
+              .widget<Text>(
+                find
+                    .descendant(
+                      of: find.byType(AlertDialog),
+                      matching: find.byType(Text),
+                    )
+                    .last,
+              )
+              .data;
           fail('Import Failed with error: $errorText');
         }
       }
-      
-      expect(success, isTrue, reason: 'Should have reached AI phase. Last seen status: $lastStatus');
+
+      expect(
+        success,
+        isTrue,
+        reason: 'Should have reached AI phase. Last seen status: $lastStatus',
+      );
       print("Success: Verified transcript extraction in Emulator environment!");
     });
   });

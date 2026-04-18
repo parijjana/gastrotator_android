@@ -30,40 +30,84 @@ class _LogScreenState extends State<LogScreen> {
     if (mounted) setState(() {});
   }
 
-  void _shareLogs() {
-    final logs = _logger.logs;
-    if (logs.isEmpty) return;
+  Map<String, List<LogEntry>> _getGroupedLogs() {
+    final Map<String, List<LogEntry>> grouped = {};
+    for (var entry in _logger.logs) {
+      final key = entry.contextId ?? "SYSTEM EVENTS";
+      if (!grouped.containsKey(key)) {
+        grouped[key] = [];
+      }
+      grouped[key]!.add(entry);
+    }
+    return grouped;
+  }
 
-    final String logText = logs.map((e) {
-      return "[${e.timestamp}] ${e.level.name.toUpperCase()}: ${e.message}\n"
-             "${e.technicalDetails != null ? 'Details: ${e.technicalDetails}\n' : ''}";
-    }).join('\n---\n');
+  String _generateLogText({String? filterContextId}) {
+    final grouped = _getGroupedLogs();
+    final buffer = StringBuffer();
+    buffer.writeln("GastRotator System Logs - ${DateTime.now()}\n");
 
+    if (filterContextId != null) {
+      final entries = grouped[filterContextId];
+      if (entries != null) {
+        _writeGroupToBuffer(buffer, filterContextId, entries);
+      }
+    } else {
+      grouped.forEach((context, entries) {
+        _writeGroupToBuffer(buffer, context, entries);
+      });
+    }
+
+    return buffer.toString();
+  }
+
+  void _writeGroupToBuffer(
+    StringBuffer buffer,
+    String context,
+    List<LogEntry> entries,
+  ) {
+    buffer.writeln("=== CONTEXT: $context ===");
+    for (var e in entries.reversed) {
+      buffer.writeln(
+        "[${e.timestamp}] ${e.level.name.toUpperCase()}: ${e.message}",
+      );
+      if (e.technicalDetails != null) {
+        buffer.writeln("  Details: ${e.technicalDetails}");
+      }
+    }
+    buffer.writeln("");
+  }
+
+  void _shareLogs({String? contextId}) {
+    final text = _generateLogText(filterContextId: contextId);
+    if (text.isEmpty) return;
     Share.share(
-      logText,
-      subject: 'GastRotator System Logs - ${DateTime.now()}',
+      text,
+      subject: contextId != null
+          ? 'GastRotator Logs: $contextId'
+          : 'GastRotator Grouped Logs',
     );
   }
 
-  void _copyAllLogs() {
-    final logs = _logger.logs;
-    if (logs.isEmpty) return;
-
-    final String logText = logs.map((e) {
-      return "[${e.timestamp}] ${e.level.name.toUpperCase()}: ${e.message}\n"
-             "${e.technicalDetails != null ? 'Details: ${e.technicalDetails}\n' : ''}";
-    }).join('\n---\n');
-
-    Clipboard.setData(ClipboardData(text: logText));
+  void _copyLogs({String? contextId}) {
+    final text = _generateLogText(filterContextId: contextId);
+    if (text.isEmpty) return;
+    Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('All logs copied to clipboard')),
+      SnackBar(
+        content: Text(
+          contextId != null
+              ? 'Logs for $contextId copied'
+              : 'All logs copied to clipboard',
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final logs = _logger.logs;
+    final groupedLogs = _getGroupedLogs();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
@@ -80,15 +124,15 @@ class _LogScreenState extends State<LogScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         actions: [
-          if (logs.isNotEmpty) ...[
+          if (_logger.logs.isNotEmpty) ...[
             IconButton(
               icon: const Icon(Icons.copy_all_rounded, color: Colors.blue),
-              onPressed: _copyAllLogs,
+              onPressed: () => _copyLogs(),
               tooltip: 'Copy All',
             ),
             IconButton(
               icon: const Icon(Icons.share_outlined, color: Colors.blue),
-              onPressed: _shareLogs,
+              onPressed: () => _shareLogs(),
               tooltip: 'Share Logs',
             ),
           ],
@@ -99,29 +143,105 @@ class _LogScreenState extends State<LogScreen> {
           ),
         ],
       ),
-      body: logs.isEmpty
+      body: _logger.logs.isEmpty
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.assignment_outlined, size: 48, color: Colors.grey[300]),
+                  Icon(
+                    Icons.assignment_outlined,
+                    size: 48,
+                    color: Colors.grey[300],
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     'No logs captured yet.',
-                    style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: Colors.grey,
+                    ),
                   ),
                 ],
               ),
             )
-          : ListView.separated(
+          : ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: logs.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 12),
+              itemCount: groupedLogs.length,
               itemBuilder: (context, index) {
-                final entry = logs[index];
-                return _LogEntryCard(entry: entry);
+                final contextId = groupedLogs.keys.elementAt(index);
+                final entries = groupedLogs[contextId]!;
+                return _LogGroup(
+                  contextId: contextId,
+                  entries: entries,
+                  onShare: () => _shareLogs(contextId: contextId),
+                  onCopy: () => _copyLogs(contextId: contextId),
+                );
               },
             ),
+    );
+  }
+}
+
+class _LogGroup extends StatelessWidget {
+  final String contextId;
+  final List<LogEntry> entries;
+  final VoidCallback onShare;
+  final VoidCallback onCopy;
+
+  const _LogGroup({
+    required this.contextId,
+    required this.entries,
+    required this.onShare,
+    required this.onCopy,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isSystem = contextId == "SYSTEM EVENTS";
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+          child: Row(
+            children: [
+              Icon(
+                isSystem ? Icons.settings_suggest : Icons.play_circle_fill,
+                size: 16,
+                color: Colors.grey[600],
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  contextId.toUpperCase(),
+                  style: GoogleFonts.shareTechMono(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[600],
+                    letterSpacing: 0.5,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.copy_rounded, size: 16, color: Colors.blue),
+                onPressed: onCopy,
+                tooltip: 'Copy Group',
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.share_outlined, size: 16, color: Colors.blue),
+                onPressed: onShare,
+                tooltip: 'Share Group',
+              ),
+            ],
+          ),
+        ),
+        ...entries.map((e) => _LogEntryCard(entry: e)),
+        const SizedBox(height: 24),
+      ],
     );
   }
 }
@@ -149,29 +269,35 @@ class _LogEntryCard extends StatelessWidget {
 
     return Card(
       elevation: 0,
+      margin: const EdgeInsets.only(bottom: 4),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: color.withOpacity(0.1)),
+        borderRadius: BorderRadius.circular(4),
+        side: BorderSide(color: color.withOpacity(0.05)),
       ),
       child: ExpansionTile(
+        dense: true,
         leading: Icon(
-          entry.level == LogLevel.error 
-              ? Icons.error_outline 
-              : (entry.level == LogLevel.warning ? Icons.warning_amber_rounded : Icons.info_outline),
+          entry.level == LogLevel.error
+              ? Icons.error_outline
+              : (entry.level == LogLevel.warning
+                    ? Icons.warning_amber_rounded
+                    : Icons.info_outline),
           color: color,
+          size: 20,
         ),
         title: Text(
           entry.message,
           style: theme.textTheme.bodyMedium?.copyWith(
             fontWeight: FontWeight.bold,
             color: color,
+            fontSize: 13,
           ),
         ),
         subtitle: Text(
-          "${entry.timestamp.hour.toString().padLeft(2, '0')}:${entry.timestamp.minute.toString().padLeft(2, '0')}:${entry.timestamp.second.toString().padLeft(2, '0')} - ${entry.level.name.toUpperCase()}",
-          style: theme.textTheme.labelSmall,
+          "${entry.timestamp.hour.toString().padLeft(2, '0')}:${entry.timestamp.minute.toString().padLeft(2, '0')}:${entry.timestamp.second.toString().padLeft(2, '0')}",
+          style: theme.textTheme.labelSmall?.copyWith(fontSize: 10),
         ),
-        childrenPadding: const EdgeInsets.all(16),
+        childrenPadding: const EdgeInsets.all(12),
         expandedCrossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (entry.technicalDetails != null) ...[
@@ -196,9 +322,13 @@ class _LogEntryCard extends StatelessWidget {
               alignment: Alignment.centerRight,
               child: TextButton.icon(
                 onPressed: () {
-                  Clipboard.setData(ClipboardData(text: entry.technicalDetails!));
+                  Clipboard.setData(
+                    ClipboardData(text: entry.technicalDetails!),
+                  );
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Details copied to clipboard')),
+                    const SnackBar(
+                      content: Text('Details copied to clipboard'),
+                    ),
                   );
                 },
                 icon: const Icon(Icons.copy_rounded, size: 16),
@@ -206,7 +336,10 @@ class _LogEntryCard extends StatelessWidget {
               ),
             ),
           ] else
-            const Text("No additional technical details."),
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8.0),
+              child: Text("No additional technical details.", style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+            ),
         ],
       ),
     );

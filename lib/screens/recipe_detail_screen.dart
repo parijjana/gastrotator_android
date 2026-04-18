@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../models/recipe.dart';
 import '../models/validation_result.dart';
+import '../utils/recipe_parser.dart';
 
 /// [PROTECTED UI]: "The Culinary Curator" Design System
 /// DO NOT REGRESS: This screen must maintain editorial typography (Noto Serif/Manrope)
@@ -26,19 +27,19 @@ class RecipeDetailScreen extends ConsumerWidget {
           _buildSliverAppBar(context),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24.0,
+                vertical: 40.0,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildStatusBanner(recipe),
-                  
+
                   // Editorial Masthead Title
-                  Text(
-                    recipe.dishName,
-                    style: theme.textTheme.displayMedium,
-                  ),
+                  Text(recipe.dishName, style: theme.textTheme.displayMedium),
                   const SizedBox(height: 16),
-                  
+
                   // Minimalist Subtitle: Category & Time
                   Row(
                     children: [
@@ -50,7 +51,11 @@ class RecipeDetailScreen extends ConsumerWidget {
                       ),
                       if (recipe.cookingTime != null) ...[
                         const SizedBox(width: 16),
-                        const Icon(Icons.timer_outlined, size: 14, color: Colors.grey),
+                        const Icon(
+                          Icons.timer_outlined,
+                          size: 14,
+                          color: Colors.grey,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           recipe.cookingTime!,
@@ -62,20 +67,25 @@ class RecipeDetailScreen extends ConsumerWidget {
                       ],
                     ],
                   ),
-                  
+
                   const SizedBox(height: 48),
                   _buildNutritionGrid(context, theme),
-                  
+
                   const SizedBox(height: 56),
                   _buildSectionTitle(context, "INGREDIENTS", theme),
                   const SizedBox(height: 24),
-                  ..._parseList(recipe.ingredients).map((item) => _buildIngredientItem(item, theme)),
-                  
+                  ...RecipeParser.parseList(
+                    recipe.ingredients,
+                  ).map((item) => _buildIngredientItem(item, theme)),
+
                   const SizedBox(height: 56),
                   _buildSectionTitle(context, "INSTRUCTIONS", theme),
                   const SizedBox(height: 24),
-                  ..._parseList(recipe.recipe).asMap().entries.map((entry) => _buildStepItem(entry.key + 1, entry.value, theme)),
-                  
+                  ...RecipeParser.parseList(recipe.recipe).asMap().entries.map(
+                    (entry) =>
+                        _buildStepItem(entry.key + 1, entry.value, theme),
+                  ),
+
                   if (recipe.notes != null && recipe.notes!.isNotEmpty) ...[
                     const SizedBox(height: 56),
                     _buildSectionTitle(context, "KITCHEN NOTES", theme),
@@ -112,7 +122,7 @@ class RecipeDetailScreen extends ConsumerWidget {
         label: Text(
           "WATCH ON YOUTUBE",
           style: theme.textTheme.labelLarge?.copyWith(
-            color: Colors.white, 
+            color: Colors.white,
             fontSize: 12,
           ),
         ),
@@ -121,30 +131,38 @@ class RecipeDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildStatusBanner(Recipe recipe) {
-    if (recipe.validationResult == ValidationResult.valid) return const SizedBox.shrink();
-    
+    if (recipe.validationResult == ValidationResult.valid) {
+      return const SizedBox.shrink();
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 32),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: recipe.validationResult == ValidationResult.lowConfidence 
-            ? const Color(0xFFFFF8E1) 
+        color: recipe.validationResult == ValidationResult.lowConfidence
+            ? const Color(0xFFFFF8E1)
             : const Color(0xFFE3F2FD),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Row(
         children: [
           Icon(
-            recipe.validationResult == ValidationResult.lowConfidence ? Icons.warning_amber_rounded : Icons.info_outline,
+            recipe.validationResult == ValidationResult.lowConfidence
+                ? Icons.warning_amber_rounded
+                : Icons.info_outline,
             size: 20,
-            color: recipe.validationResult == ValidationResult.lowConfidence ? Colors.orange[900] : Colors.blue[900],
+            color: recipe.validationResult == ValidationResult.lowConfidence
+                ? Colors.orange[900]
+                : Colors.blue[900],
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               recipe.validationResult.userMessage(null),
               style: TextStyle(
-                color: recipe.validationResult == ValidationResult.lowConfidence ? Colors.orange[900] : Colors.blue[900],
+                color: recipe.validationResult == ValidationResult.lowConfidence
+                    ? Colors.orange[900]
+                    : Colors.blue[900],
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
@@ -173,9 +191,7 @@ class RecipeDetailScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 16),
-          Expanded(
-            child: Text(text, style: theme.textTheme.bodyLarge),
-          ),
+          Expanded(child: Text(text, style: theme.textTheme.bodyLarge)),
         ],
       ),
     );
@@ -211,46 +227,6 @@ class RecipeDetailScreen extends ConsumerWidget {
     );
   }
 
-  /// [PROTECTED LOGIC]: The Smart Parser
-  /// Corrects "wall of text" regressions and preserves multi-digit numbering.
-  List<String> _parseList(String input) {
-    if (input.trim().isEmpty) return [];
-    
-    // 1. Normalize line endings
-    String text = input.replaceAll('\r\n', '\n').trim();
-    
-    // 2. Identify and split
-    List<String> parts;
-    int newlineCount = '\n'.allMatches(text).length;
-    
-    if (newlineCount < 2 && RegExp(r'\d+[\.\)]\s+').allMatches(text).length > 2) {
-      parts = text.split(RegExp(r'(?=\d+[\.\)]\s+)'));
-    } else {
-      parts = text.split(RegExp(r'\n+|(?=[•\-\*]\s+)'));
-    }
-    
-    return parts
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .map((s) {
-          // Aggressively strip multiple leading markers (e.g., "10. 1. Text" -> "Text")
-          String cleaned = s;
-          bool changed = true;
-          while (changed) {
-            final original = cleaned;
-            // Strip leading numbers: "1. ", "10) "
-            cleaned = cleaned.replaceFirst(RegExp(r'^\d+[\.\)]\s*'), '');
-            // Strip leading bullets: "• ", "- ", "* "
-            cleaned = cleaned.replaceFirst(RegExp(r'^[•\-\*]\s*'), '');
-            cleaned = cleaned.trim();
-            changed = (original != cleaned);
-          }
-          return cleaned;
-        })
-        .where((s) => s.isNotEmpty && s != '•' && s != '-' && s != '*')
-        .toList();
-  }
-
   Widget _buildSliverAppBar(BuildContext context) {
     return SliverAppBar(
       expandedHeight: 350.0,
@@ -261,7 +237,10 @@ class RecipeDetailScreen extends ConsumerWidget {
       leading: IconButton(
         icon: Container(
           padding: const EdgeInsets.all(8),
-          decoration: const BoxDecoration(color: Colors.black26, shape: BoxShape.circle),
+          decoration: const BoxDecoration(
+            color: Colors.black26,
+            shape: BoxShape.circle,
+          ),
           child: const Icon(Icons.close, color: Colors.white, size: 20),
         ),
         onPressed: () {
@@ -285,7 +264,12 @@ class RecipeDetailScreen extends ConsumerWidget {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Colors.black45, Colors.transparent, Colors.transparent, Colors.black38],
+                  colors: [
+                    Colors.black45,
+                    Colors.transparent,
+                    Colors.transparent,
+                    Colors.black38,
+                  ],
                   stops: [0.0, 0.2, 0.8, 1.0],
                 ),
               ),
@@ -301,15 +285,30 @@ class RecipeDetailScreen extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 8),
       decoration: BoxDecoration(
         border: Border.symmetric(
-          horizontal: BorderSide(color: theme.colorScheme.onSurface.withOpacity(0.1), width: 1),
+          horizontal: BorderSide(
+            color: theme.colorScheme.onSurface.withOpacity(0.1),
+            width: 1,
+          ),
         ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildNutritionItem("KCAL", "${recipe.totalCalories?.round() ?? '-'}", theme),
-          _buildNutritionItem("KCAL/100G", "${recipe.caloriesPer100g?.round() ?? '-'}", theme),
-          _buildNutritionItem("GRAMS", "${recipe.totalWeightGrams?.round() ?? '-'}", theme),
+          _buildNutritionItem(
+            "KCAL",
+            "${recipe.totalCalories?.round() ?? '-'}",
+            theme,
+          ),
+          _buildNutritionItem(
+            "KCAL/100G",
+            "${recipe.caloriesPer100g?.round() ?? '-'}",
+            theme,
+          ),
+          _buildNutritionItem(
+            "GRAMS",
+            "${recipe.totalWeightGrams?.round() ?? '-'}",
+            theme,
+          ),
         ],
       ),
     );
@@ -318,10 +317,7 @@ class RecipeDetailScreen extends ConsumerWidget {
   Widget _buildNutritionItem(String label, String value, ThemeData theme) {
     return Column(
       children: [
-        Text(
-          label,
-          style: theme.textTheme.labelSmall,
-        ),
+        Text(label, style: theme.textTheme.labelSmall),
         const SizedBox(height: 12),
         Text(
           value,
@@ -334,7 +330,11 @@ class RecipeDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSectionTitle(BuildContext context, String title, ThemeData theme) {
+  Widget _buildSectionTitle(
+    BuildContext context,
+    String title,
+    ThemeData theme,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -347,11 +347,7 @@ class RecipeDetailScreen extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 12),
-        Container(
-          width: 32,
-          height: 3,
-          color: theme.colorScheme.primary,
-        ),
+        Container(width: 32, height: 3, color: theme.colorScheme.primary),
       ],
     );
   }

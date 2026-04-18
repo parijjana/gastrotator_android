@@ -6,22 +6,29 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   setUpAll(() {
-    // Initialize sqflite for ffi
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   });
 
-  testWidgets('GastRotator smoke test - Verify initial empty state', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
+  testWidgets('GastRotator smoke test - Verify initial empty state', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(const ProviderScope(child: GastRotatorApp()));
+    await tester.pumpAndSettle();
 
-    // Verify that our app starts on the home screen
     expect(find.text('GastRotator'), findsOneWidget);
-    
-    // Verify initial "empty" message
-    expect(find.text('Your kitchen is empty!'), findsOneWidget);
 
-    // Verify FAB exists
-    expect(find.byIcon(Icons.auto_awesome), findsOneWidget);
+    // Verify instructional empty state
+    expect(find.text('1. FIND A RECIPE'), findsOneWidget);
+    expect(find.text('2. SEARCH, PASTE, OR SHARE'), findsOneWidget);
+
+    // Verify Bottom Navigation exists
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('About'), findsOneWidget);
+
+    // Verify FAB is GONE (Unified Search Pill used instead)
+    expect(find.byType(FloatingActionButton), findsNothing);
   });
 }

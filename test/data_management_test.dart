@@ -20,7 +20,7 @@ void main() {
       final databasesPath = await getDatabasesPath();
       dbPath = p.join(databasesPath, 'recipes.db');
       exportPath = p.join(databasesPath, 'test_export.zip');
-      
+
       // Clear any existing test data
       final dbFile = File(dbPath);
       if (await dbFile.exists()) await dbFile.delete();
@@ -41,7 +41,7 @@ void main() {
         importStatus: "Completed",
       );
       await dbHelper.insert(testRecipe);
-      
+
       final initialRecipes = await dbHelper.getAllRecipes();
       expect(initialRecipes.length, 1);
       expect(initialRecipes.first.dishName, "Export Test Dish");
@@ -54,7 +54,7 @@ void main() {
       final bytes = await dbFile.readAsBytes();
       archive.addFile(ArchiveFile('recipes.db', bytes.length, bytes));
       final zipData = ZipEncoder().encode(archive);
-      
+
       final outFile = File(exportPath);
       await outFile.writeAsBytes(zipData);
       expect(await outFile.exists(), isTrue);
@@ -62,11 +62,11 @@ void main() {
       // 3. Clear Database
       // Close the connection first to allow deletion
       // (DatabaseHelper doesn't expose a way to reset easily, so we just delete the file)
-      // Actually, DatabaseHelper uses a singleton _database. 
+      // Actually, DatabaseHelper uses a singleton _database.
       // We'll just delete and re-init if we can, but simpler is to just delete records.
       final db = await dbHelper.database;
-      await db.delete('recipes');
-      
+      await db?.delete('recipes');
+
       var currentRecipes = await dbHelper.getAllRecipes();
       expect(currentRecipes.isEmpty, isTrue);
 
