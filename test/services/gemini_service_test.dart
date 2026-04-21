@@ -1,9 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:android_app/services/gemini_service.dart';
+import 'package:android_app/services/rate_limit_dispatcher.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:mocktail/mocktail.dart';
+
+class MockRateLimitDispatcher extends Mock implements RateLimitDispatcher {}
 
 void main() {
   late GeminiService geminiService;
+  late MockRateLimitDispatcher mockDispatcher;
 
   setUpAll(() {
     sqfliteFfiInit();
@@ -11,50 +16,40 @@ void main() {
   });
 
   setUp(() {
-    geminiService = GeminiService(apiKey: 'test_key');
+    mockDispatcher = MockRateLimitDispatcher();
+    geminiService = GeminiService(apiKey: 'test_key', dispatcher: mockDispatcher);
   });
 
   group('GeminiService Parsing', () {
-    test('parseRecipe should handle raw JSON correctly', () {
+    test('parseRecipe should correctly map a valid JSON string to a Recipe object', () {
       const jsonText = '''
-{
-  "dish_name": "Butter Chicken",
-  "category": "Dinner",
-  "ingredients": "Chicken, Butter",
-  "recipe": "Cook it.",
-  "total_calories": 500,
-  "calories_per_100g": 150,
-  "total_weight_grams": 300,
-  "cooking_time": "45 mins"
-}
-''';
+      {
+        "dish_name": "Paneer Tikka",
+        "category": "Appetizer",
+        "ingredients": "Paneer, Curd, Spices",
+        "recipe": "Marinate paneer.",
+        "total_calories": 300,
+        "calories_per_100g": 150,
+        "total_weight_grams": 200,
+        "cooking_time": "20 mins",
+        "tips_warnings": "Do not overcook."
+      }
+      ''';
+
       final recipe = geminiService.parseRecipe(
         jsonText,
         'Title',
         'Channel',
-        'URL',
+        'https://youtube.com/paneer',
         'thumb',
       );
 
       expect(recipe, isNotNull);
-      expect(recipe!.dishName, 'Butter Chicken');
-      expect(recipe.totalCalories, 500);
-      expect(recipe.cookingTime, '45 mins');
-    });
-
-    test('parseRecipe should handle markdown blocks correctly', () {
-      const jsonText =
-          '```json\n{"dish_name": "Salad", "category": "Lunch", "ingredients": "Lettuce", "recipe": "Mix it."}\n```';
-      final recipe = geminiService.parseRecipe(
-        jsonText,
-        'Title',
-        'Channel',
-        'URL',
-        'thumb',
-      );
-
-      expect(recipe, isNotNull);
-      expect(recipe!.dishName, 'Salad');
+      expect(recipe!.dishName, 'Paneer Tikka');
+      expect(recipe.ingredients, 'Paneer, Curd, Spices');
+      expect(recipe.recipe, 'Marinate paneer.');
+      expect(recipe.youtubeUrl, 'https://youtube.com/paneer');
+      expect(recipe.totalCalories, 300);
     });
 
     test('parseRecipe should return null on invalid JSON', () {

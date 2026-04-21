@@ -10,6 +10,7 @@ import '../models/video_length.dart';
 import '../services/gemini_service.dart';
 import '../services/youtube_service.dart';
 import '../utils/youtube_url_parser.dart';
+import '../services/rate_limit_dispatcher.dart';
 import '../services/logger/app_logger.dart';
 
 // --- API Key Provider ---
@@ -62,9 +63,29 @@ final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
 // --- Gemini Service Provider ---
 
 class LastSuccessfulModelNotifier extends Notifier<String?> {
+  static const _key = 'last_successful_model';
+  late FlutterSecureStorage _storage;
+
   @override
-  String? build() => null;
-  void set(String? val) => state = val;
+  String? build() {
+    _storage = ref.watch(secureStorageProvider);
+    _loadFromStorage();
+    return null;
+  }
+
+  Future<void> _loadFromStorage() async {
+    final model = await _storage.read(key: _key);
+    if (model != null) {
+      state = model;
+    }
+  }
+
+  void set(String? val) {
+    state = val;
+    if (val != null) {
+      _storage.write(key: _key, value: val);
+    }
+  }
 }
 
 final lastSuccessfulModelProvider =
@@ -72,14 +93,26 @@ final lastSuccessfulModelProvider =
   LastSuccessfulModelNotifier.new,
 );
 
+class GlobalHaltNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+  void set(bool val) => state = val;
+}
+
+final globalHaltProvider = NotifierProvider<GlobalHaltNotifier, bool>(
+  GlobalHaltNotifier.new,
+);
+
 final geminiServiceProvider =
     Provider.family<GeminiService, String?>((ref, contextId) {
   // Note: We use synchronous watch here, but the worker awaits the future first
   final apiKey = ref.watch(apiKeyProvider).value ?? '';
   final lastModel = ref.watch(lastSuccessfulModelProvider);
+  final dispatcher = ref.watch(rateLimitDispatcherProvider);
 
   return GeminiService(
     apiKey: apiKey,
+    dispatcher: dispatcher,
     lastSuccessfulModel: lastModel,
     onModelSuccess: (modelName) {
       ref.read(lastSuccessfulModelProvider.notifier).set(modelName);
@@ -94,7 +127,8 @@ final geminiServiceProvider =
 // --- External Services Providers ---
 
 final youTubeServiceProvider = Provider<YouTubeService>((ref) {
-  final yt = YouTubeService();
+  final dispatcher = ref.watch(rateLimitDispatcherProvider);
+  final yt = YouTubeService(dispatcher: dispatcher);
   ref.onDispose(() => yt.close());
   return yt;
 });
@@ -180,6 +214,10 @@ final magicOverlayProvider = NotifierProvider<MagicOverlayNotifier, bool>(
 
 final databaseHelperProvider = Provider<DatabaseHelper>((ref) {
   return DatabaseHelper.instance;
+});
+
+final rateLimitDispatcherProvider = Provider<RateLimitDispatcher>((ref) {
+  return RateLimitDispatcher();
 });
 
 final workerEnabledProvider = Provider<bool>((ref) => true);
@@ -293,14 +331,34 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
     await loadRecipes();
   }
 
-  int getRelativePosition(int id) {
-    final queuedItems = state.where((r) => r.importStatus == "In Queue").toList();
-    queuedItems.sort(
-      (a, b) => (a.queuePosition ?? 0).compareTo(b.queuePosition ?? 0),
-    );
+  Future<void> pauseExtraction(int id) async {
+    final recipe = state.firstWhere((r) => r.id == id);
+    await updateRecipe(recipe.copyWith(importStatus: "Paused"));
+    _logger.info("Extraction paused manually.", contextId: recipe.youtubeUrl);
+  }
 
-    final index = queuedItems.indexWhere((r) => r.id == id);
-    return index != -1 ? index + 1 : 0;
+  Future<void> resumeExtraction(int id) async {
+    // Check if anything else is currently extracting or waiting to extract
+    final isBusy = state.any((r) =>
+        r.importStatus != "Completed" &&
+        r.importStatus != "Paused" &&
+        r.importStatus?.startsWith("Failed") == false &&
+        r.importStatus != "No transcript found");
+
+    if (isBusy) {
+      throw "Extraction pipeline in use. Please pause the current task first.";
+    }
+
+    // Reset Global Halt if user manually resumes
+    ref.read(globalHaltProvider.notifier).set(false);
+
+    final recipe = state.firstWhere((r) => r.id == id);
+    await updateRecipe(recipe.copyWith(importStatus: "In Queue"));
+    _logger.info("Extraction resumed manually.", contextId: recipe.youtubeUrl);
+    
+    if (ref.read(workerEnabledProvider)) {
+      _startQueueWorker();
+    }
   }
 
   // --- AI Magic Workflow ---
@@ -311,7 +369,7 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
 
     final normalizedUrl = "https://www.youtube.com/watch?v=$videoId";
 
-    // 1. Centralized Duplicate Check (using normalized ID)
+    // 1. Centralized Duplicate Check
     final existingIndex = state.indexWhere(
       (r) =>
           r.youtubeUrl != null &&
@@ -322,83 +380,33 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
       final existingRecipe = state[existingIndex];
       _pendingShakeId = existingRecipe.id;
       ref.notifyListeners();
-
-      Future.delayed(const Duration(seconds: 1), () {
-        _pendingShakeId = null;
-      });
-
+      Future.delayed(const Duration(seconds: 1), () => _pendingShakeId = null);
       throw "Duplicate Recipe: This video is already in your kitchen.";
     }
 
-    // 2. Assign Queue Position
-    int nextPos = 1;
-    if (state.isNotEmpty) {
-      final positions =
-          state.map((r) => r.queuePosition ?? 0).where((p) => p > 0).toList();
-      if (positions.isNotEmpty) {
-        nextPos = positions.reduce((a, b) => a > b ? a : b) + 1;
-      }
-    }
+    // 2. FIFO Status Assignment
+    // If something is already running, new one starts as Paused
+    final isBusy = state.any((r) =>
+        r.importStatus != "Completed" &&
+        r.importStatus != "Paused" &&
+        r.importStatus?.startsWith("Failed") == false);
 
-    final timestamp = DateTime.now().toString().split('.').first;
     final placeholder = Recipe(
-      dishName: "Importing: $timestamp",
+      dishName: "Importing: ${DateTime.now().toString().split('.').first}",
       category: "Pending",
       ingredients: "",
       recipe: "",
       youtubeUrl: normalizedUrl,
-      importStatus: "In Queue",
-      queuePosition: nextPos,
+      importStatus: isBusy ? "Paused" : "In Queue",
     );
 
     _logger.info("Import triggered.", contextId: normalizedUrl);
     await addRecipe(placeholder);
   }
 
-  Future<void> processRecipeImmediately(int id) async {
-    final recipes = await _db.getAllRecipes();
-    final targetIdx = recipes.indexWhere((r) => r.id == id);
-    if (targetIdx == -1) return;
-
-    final target = recipes[targetIdx];
-
-    // Find current minimum position in queue
-    int minPos = 1;
-    final activeQueue =
-        recipes
-            .where(
-              (r) =>
-                  r.importStatus == "In Queue" ||
-                  r.importStatus == "Placeholder Created",
-            )
-            .toList();
-
-    if (activeQueue.isNotEmpty) {
-      final positions =
-          activeQueue
-              .map((r) => r.queuePosition ?? 0)
-              .where((p) => p > 0)
-              .toList();
-      if (positions.isNotEmpty) {
-        minPos = positions.reduce((a, b) => a < b ? a : b);
-      }
-    }
-
-    // Set target to be first
-    await updateRecipe(
-      target.copyWith(
-        queuePosition: minPos - 1,
-        importStatus: "In Queue", // Ensure it's back in queue if it was failed
-      ),
-    );
-
-    if (ref.read(workerEnabledProvider)) {
-      _startQueueWorker();
-    }
-  }
-
   Future<void> _startQueueWorker() async {
     if (_isWorkerBusy) return;
+    if (ref.read(globalHaltProvider)) return;
     _isWorkerBusy = true;
 
     try {
@@ -411,38 +419,26 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
   Future<void> _processQueue() async {
     while (true) {
       if (!ref.mounted) break;
+      if (ref.read(globalHaltProvider)) break;
 
-      // Reload state to see latest status
-      final currentRecipes = await _db.getAllRecipes();
-      if (!ref.mounted) break;
-      state = currentRecipes;
-
-      // Find the next recipe in queue (lowest position)
-      final queue =
-          state
-              .where(
-                (r) =>
-                    r.importStatus == "In Queue" ||
-                    r.importStatus == "Placeholder Created",
-              )
-              .toList();
-
+      // 1. Find the single oldest "In Queue" recipe (FIFO)
+      final queue = state.where((r) => r.importStatus == "In Queue").toList();
       if (queue.isEmpty) break;
 
-      queue.sort(
-        (a, b) => (a.queuePosition ?? 0).compareTo(b.queuePosition ?? 0),
-      );
+      // Sort by ID ascending (FIFO)
+      queue.sort((a, b) => (a.id ?? 0).compareTo(b.id ?? 0));
       final nextRecipe = queue.first;
 
       try {
         await autoProcessRecipe(nextRecipe);
-        // Breathing room between recipes to prevent rate-limiting
-        await Future.delayed(const Duration(milliseconds: 1500));
       } catch (e) {
-        debugPrint("Queue Worker error: $e");
+        debugPrint("Queue Worker critical error: $e");
+        break; 
       }
 
-      if (!ref.mounted) break;
+      // Check if we should continue to next item automatically
+      await loadRecipes(); 
+      await Future.delayed(const Duration(milliseconds: 500));
     }
   }
 
@@ -600,113 +596,117 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
     if (!ref.mounted) return;
     final gemini = ref.read(geminiServiceProvider(contextId));
 
-    await updateRecipe(recipe.copyWith(importStatus: "Analyzing Language..."));
-    if (!ref.mounted) return;
-
-    final langCode = await gemini.detectLanguage(transcript);
-    if (!ref.mounted) return;
-    if (langCode != null && langCode != 'en') {
-      _logger.warn(
-        "AI detected unsupported language: $langCode",
-        contextId: contextId,
-      );
-      await updateRecipe(
-        recipe.copyWith(
-          importStatus: "No transcript found",
-          transcriptError: TranscriptFetchError.unsupportedLanguage,
-          category: langCode,
-        ),
-      );
-      return;
-    }
-
-    await updateRecipe(recipe.copyWith(importStatus: "Validating Content..."));
-    if (!ref.mounted) return;
-    final validation = await gemini.validateContent(transcript);
-    if (!ref.mounted) return;
-    final valResult = validation['result'] as ValidationResult;
-
-    if (valResult == ValidationResult.wrongDomain ||
-        valResult == ValidationResult.insufficientContent) {
-      _logger.warn(
-        "Content validation failed: ${valResult.name}",
-        contextId: contextId,
-      );
-      await updateRecipe(
-        recipe.copyWith(
-          importStatus: "No transcript found",
-          validationResult: valResult,
-          flavorProfile: (validation['content_type'] as String?),
-        ),
-      );
-      return;
-    }
-
-    final recipeWithVal = recipe.copyWith(validationResult: valResult);
-    await updateRecipe(recipeWithVal);
-    if (!ref.mounted) return;
-
-    String finalInputText = transcript;
-    if (recipeWithVal.videoLength == VideoLength.long &&
-        recipeWithVal.importStatus != "Processing Confirmed") {
-      _logger.info(
-        "Long video detected. Awaiting user confirmation.",
-        contextId: contextId,
-      );
-      await updateRecipe(
-        recipeWithVal.copyWith(
-          importStatus: "Awaiting Confirmation (Long Video)",
-        ),
-      );
-      return;
-    }
-
-    if (recipeWithVal.videoLength == VideoLength.medium ||
-        (recipeWithVal.videoLength == VideoLength.long &&
-            recipeWithVal.importStatus == "Processing Confirmed")) {
-      await updateRecipe(
-        recipeWithVal.copyWith(importStatus: "Summarizing Segments..."),
-      );
+    try {
+      await updateRecipe(recipe.copyWith(importStatus: "Analyzing Language..."));
       if (!ref.mounted) return;
-      final segments = recipeWithVal.segments;
-      if (segments != null && segments.isNotEmpty) {
-        _logger.info(
-          "Summarizing video segments for extraction.",
+
+      final (langCode, modelUsed) = await gemini.detectLanguage(transcript);
+      if (!ref.mounted) return;
+      if (langCode != null && langCode != 'en') {
+        _logger.warn(
+          "AI detected unsupported language: $langCode",
           contextId: contextId,
         );
-        List<String> summaries = [];
-        String currentChunk = "";
-        double chunkStartTime =
-            (segments.first['start'] as num?)?.toDouble() ?? 0.0;
-
-        for (var seg in segments) {
-          currentChunk += " ${seg['text']}";
-          double currentTime = (seg['start'] as num?)?.toDouble() ?? 0.0;
-
-          if (currentTime - chunkStartTime > 300) {
-            final summary = await gemini.summarizeSegment(currentChunk);
-            if (summary != null) summaries.add(summary);
-            currentChunk = "";
-            chunkStartTime = currentTime;
-          }
-        }
-        if (currentChunk.isNotEmpty) {
-          final summary = await gemini.summarizeSegment(currentChunk);
-          if (summary != null) summaries.add(summary);
-        }
-        finalInputText = summaries.join("\n\n---\n\n");
+        await updateRecipe(
+          recipe.copyWith(
+            importStatus: "No transcript found",
+            transcriptError: TranscriptFetchError.unsupportedLanguage,
+            category: langCode,
+          ),
+        );
+        return;
       }
-    }
 
-    if (!ref.mounted) return;
-    await updateRecipe(recipeWithVal.copyWith(importStatus: "AI Processing..."));
-    try {
+      await updateRecipe(recipe.copyWith(importStatus: "Validating Content..."));
+      if (!ref.mounted) return;
+      final validation = await gemini.validateContent(transcript, modelName: modelUsed);
+      if (!ref.mounted) return;
+      final valResult =
+          (validation['result'] as ValidationResult?) ?? ValidationResult.valid;
+
+      if (valResult == ValidationResult.wrongDomain ||
+          valResult == ValidationResult.insufficientContent) {
+        _logger.warn(
+          "Content validation failed: ${valResult.name}",
+          contextId: contextId,
+        );
+        await updateRecipe(
+          recipe.copyWith(
+            importStatus: "No transcript found",
+            validationResult: valResult,
+            flavorProfile: (validation['content_type'] as String?),
+          ),
+        );
+        return;
+      }
+
+      final recipeWithVal = recipe.copyWith(validationResult: valResult);
+      await updateRecipe(recipeWithVal);
+      if (!ref.mounted) return;
+
+      String finalInputText = transcript;
+      if (recipeWithVal.videoLength == VideoLength.long &&
+          recipeWithVal.importStatus != "Processing Confirmed") {
+        _logger.info(
+          "Long video detected. Awaiting user confirmation.",
+          contextId: contextId,
+        );
+        await updateRecipe(
+          recipeWithVal.copyWith(
+            importStatus: "Awaiting Confirmation (Long Video)",
+          ),
+        );
+        return;
+      }
+
+      if (recipeWithVal.videoLength == VideoLength.medium ||
+          (recipeWithVal.videoLength == VideoLength.long &&
+              recipeWithVal.importStatus == "Processing Confirmed")) {
+        await updateRecipe(
+          recipeWithVal.copyWith(importStatus: "Summarizing Segments..."),
+        );
+        if (!ref.mounted) return;
+        final segments = recipeWithVal.segments;
+        if (segments != null && segments.isNotEmpty) {
+          _logger.info(
+            "Summarizing video segments for extraction.",
+            contextId: contextId,
+          );
+          List<String> summaries = [];
+          String currentChunk = "";
+          double chunkStartTime =
+              (segments.first['start'] as num?)?.toDouble() ?? 0.0;
+
+          for (var seg in segments) {
+            currentChunk += " ${seg['text']}";
+            double currentTime = (seg['start'] as num?)?.toDouble() ?? 0.0;
+
+            if (currentTime - chunkStartTime > 300) {
+              final summary = await gemini.summarizeSegment(currentChunk, modelName: modelUsed);
+              if (summary != null) summaries.add(summary);
+              currentChunk = "";
+              chunkStartTime = currentTime;
+            }
+          }
+          if (currentChunk.isNotEmpty) {
+            final summary = await gemini.summarizeSegment(currentChunk, modelName: modelUsed);
+            if (summary != null) summaries.add(summary);
+          }
+          finalInputText = summaries.join("\n\n---\n\n");
+        }
+      }
+
+      if (!ref.mounted) return;
+      await updateRecipe(
+        recipeWithVal.copyWith(importStatus: "AI Processing..."),
+      );
       final result = await gemini.extractRecipeFromContent(
         title: recipeWithVal.youtubeTitle ?? recipeWithVal.dishName,
         channel: recipeWithVal.youtubeChannel ?? "Unknown",
         url: recipeWithVal.youtubeUrl!,
         thumbnail: recipeWithVal.thumbnailUrl,
         transcript: finalInputText,
+        modelName: modelUsed,
       );
 
       if (!ref.mounted) return;
@@ -727,23 +727,26 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
           "Gemini failed to return a valid recipe.",
           contextId: contextId,
         );
-        await updateRecipe(recipeWithVal.copyWith(importStatus: "Failed: Gemini"));
+        await updateRecipe(
+          recipeWithVal.copyWith(importStatus: "Failed: Gemini"),
+        );
       }
     } on TranscriptFetchError catch (e) {
       if (!ref.mounted) return;
       if (e == TranscriptFetchError.apiLimitReached) {
         _logger.error(
-          "API Limit Reached during extraction.",
+          "API Limit Reached during extraction. Halting pipeline.",
           contextId: contextId,
         );
+        ref.read(globalHaltProvider.notifier).set(true);
         await updateRecipe(
-          recipeWithVal.copyWith(
+          recipe.copyWith(
             importStatus: "No transcript found",
             transcriptError: TranscriptFetchError.apiLimitReached,
           ),
         );
       } else {
-        await updateRecipe(recipeWithVal.copyWith(importStatus: "Failed: Gemini"));
+        await updateRecipe(recipe.copyWith(importStatus: "Failed: Gemini"));
       }
     } catch (e) {
       _logger.error(
@@ -751,7 +754,7 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
         contextId: contextId,
       );
       if (ref.mounted) {
-        await updateRecipe(recipeWithVal.copyWith(importStatus: "Failed: Gemini"));
+        await updateRecipe(recipe.copyWith(importStatus: "Failed: Gemini"));
       }
     }
   }

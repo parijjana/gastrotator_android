@@ -4,6 +4,7 @@ import '../models/recipe.dart';
 import '../models/validation_result.dart';
 import 'package:http/http.dart' as http;
 import '../models/transcript_error.dart';
+import 'rate_limit_dispatcher.dart';
 import 'logger/app_logger.dart';
 
 class GeminiService {
@@ -14,19 +15,22 @@ class GeminiService {
   final Function(String)? onModelSuccess;
   final String? contextId;
   final http.Client _httpClient;
+  final RateLimitDispatcher _dispatcher;
 
   // Priority order for families (Generic keywords, no hardcoded versions)
-  static const List<String> _priorityKeywords = ['flash', 'gemma'];
+  static const List<String> _priorityKeywords = ['flash', 'gemma', 'pro'];
 
   GeminiService({
     required this.apiKey,
+    required RateLimitDispatcher dispatcher,
     GenerativeModel? mockModel,
     this.lastSuccessfulModel,
     this.onModelSuccess,
     this.contextId,
     http.Client? httpClient,
   })  : _mockModel = mockModel,
-        _httpClient = httpClient ?? http.Client();
+        _httpClient = httpClient ?? http.Client(),
+        _dispatcher = dispatcher;
 
   /// 1. Dynamically discover all available models and rank them into a "Ladder"
   Future<List<String>> discoverAndRankModels() async {
@@ -39,7 +43,14 @@ class GeminiService {
       final url = Uri.parse(
         "https://generativelanguage.googleapis.com/v1beta/models?key=$apiKey",
       );
-      final response = await _httpClient.get(url);
+      
+      // DISPATCHED CALL
+      final response = await _dispatcher.dispatch(
+        type: ApiType.gemini,
+        description: "Model Discovery",
+        contextId: contextId,
+        task: () => _httpClient.get(url),
+      );
 
       if (response.statusCode != 200) {
         _logger.warn(
@@ -119,7 +130,25 @@ class GeminiService {
   Future<T?> _runWithLadder<T>({
     required String actionName,
     required Future<T?> Function(String modelName) task,
+    String? modelOverride,
   }) async {
+    // 0. If model is OVERRIDDEN (Stick to model policy), try ONLY that model once.
+    if (modelOverride != null && modelOverride.isNotEmpty) {
+      _logger.info(
+        "[$actionName] Using overridden model: $modelOverride",
+        contextId: contextId,
+      );
+      try {
+        return await task(modelOverride);
+      } catch (e) {
+        _logger.warn(
+          "[$actionName] Overridden model $modelOverride failed.",
+          contextId: contextId,
+        );
+        rethrow;
+      }
+    }
+
     // 1. Try the last successful model first (FAST PATH)
     if (lastSuccessfulModel != null && lastSuccessfulModel!.isNotEmpty) {
       _logger.info(
@@ -179,7 +208,6 @@ class GeminiService {
           contextId: contextId,
         );
 
-        // 429 is a personal limit, no point in switching models usually, but ladder might have different quotas
         if (errStr.contains('429')) {
           _logger.error(
             "[$actionName] API Limit Reached (429)",
@@ -188,7 +216,6 @@ class GeminiService {
           throw TranscriptFetchError.apiLimitReached;
         }
 
-        // 503 (Overloaded) or 404 (Not Found/Deprecated) -> Try next rung
         if (errStr.contains('503') || errStr.contains('404')) {
           _logger.warn(
             "[$actionName] Model $modelName is unavailable. Falling back...",
@@ -197,7 +224,7 @@ class GeminiService {
           continue;
         }
 
-        rethrow; // Other errors (like 400 Bad Request) shouldn't be retried
+        rethrow; 
       } catch (e) {
         _logger.error(
           "[$actionName] Unexpected Exception",
@@ -216,30 +243,42 @@ class GeminiService {
     return null;
   }
 
-  Future<String?> detectLanguage(String text) async {
-    return _runWithLadder<String>(
+  Future<(String? result, String? modelUsed)> detectLanguage(String text) async {
+    String? used;
+    final result = await _runWithLadder<String>(
       actionName: "Language Detection",
-      task: (modelName) async {
+      task: (mName) async {
+        used = mName;
         final model =
-            _mockModel ?? GenerativeModel(model: modelName, apiKey: apiKey);
+            _mockModel ?? GenerativeModel(model: mName, apiKey: apiKey);
         final prompt =
             "Detect the language of the following text. Reply with only the ISO 639-1 language code (e.g. 'en', 'hi', 'ta'). Text: ${text.substring(0, text.length > 1000 ? 1000 : text.length)}";
-        final response = await model.generateContent([Content.text(prompt)]);
+        
+        // DISPATCHED CALL
+        final response = await _dispatcher.dispatch(
+          type: ApiType.gemini,
+          description: "Language Detection",
+          contextId: contextId,
+          task: () => model.generateContent([Content.text(prompt)]),
+        );
+        
         return response.text?.trim().toLowerCase();
       },
     );
+    return (result, used);
   }
 
-  Future<Map<String, dynamic>> validateContent(String transcript) async {
+  Future<Map<String, dynamic>> validateContent(String transcript, {String? modelName}) async {
     if (transcript.split(' ').length < 200) {
       return {'result': ValidationResult.insufficientContent};
     }
 
     final result = await _runWithLadder<Map<String, dynamic>>(
       actionName: "Domain Validation",
-      task: (modelName) async {
+      modelOverride: modelName,
+      task: (mName) async {
         final model =
-            _mockModel ?? GenerativeModel(model: modelName, apiKey: apiKey);
+            _mockModel ?? GenerativeModel(model: mName, apiKey: apiKey);
         final prompt =
             """
         You are a content classifier for a cooking app. Analyse the following transcript and return a JSON object with exactly these fields:
@@ -256,7 +295,14 @@ class GeminiService {
         $transcript
         """;
 
-        final response = await model.generateContent([Content.text(prompt)]);
+        // DISPATCHED CALL
+        final response = await _dispatcher.dispatch(
+          type: ApiType.gemini,
+          description: "Domain Validation",
+          contextId: contextId,
+          task: () => model.generateContent([Content.text(prompt)]),
+        );
+        
         if (response.text == null) return null;
 
         final data = json.decode(
@@ -283,15 +329,24 @@ class GeminiService {
     return result ?? {'result': ValidationResult.lowConfidence};
   }
 
-  Future<String?> summarizeSegment(String text) async {
+  Future<String?> summarizeSegment(String text, {String? modelName}) async {
     return _runWithLadder<String>(
       actionName: "Segment Summary",
-      task: (modelName) async {
+      modelOverride: modelName,
+      task: (mName) async {
         final model =
-            _mockModel ?? GenerativeModel(model: modelName, apiKey: apiKey);
+            _mockModel ?? GenerativeModel(model: mName, apiKey: apiKey);
         final prompt =
             "This is a segment of a cooking video transcript. Summarize only the cooking-relevant content: ingredients mentioned, steps described, and any tips. Be concise. Text:\n$text";
-        final response = await model.generateContent([Content.text(prompt)]);
+        
+        // DISPATCHED CALL
+        final response = await _dispatcher.dispatch(
+          type: ApiType.gemini,
+          description: "Segment Summary",
+          contextId: contextId,
+          task: () => model.generateContent([Content.text(prompt)]),
+        );
+        
         return response.text?.trim();
       },
     );
@@ -364,6 +419,7 @@ class GeminiService {
     String? thumbnail,
     String? transcript,
     String? description,
+    String? modelName,
   }) async {
     final String sourceText = (transcript != null && transcript.isNotEmpty)
         ? "RAW TRANSCRIPT:\n$transcript"
@@ -371,12 +427,12 @@ class GeminiService {
 
     return _runWithLadder<Recipe>(
       actionName: "Recipe Extraction",
-      task: (modelName) async {
-        // Note: For complex tasks like this, we need to pass system instructions.
+      modelOverride: modelName,
+      task: (mName) async {
         final specializedModel =
             _mockModel ??
             GenerativeModel(
-              model: modelName,
+              model: mName,
               apiKey: apiKey,
               systemInstruction: Content.system("""
 You are a cooking assistant. You will receive a raw auto-generated YouTube transcript or video description. Perform the following two operations in order:
@@ -404,9 +460,14 @@ No preamble, no commentary.
 """),
             );
 
-        final response = await specializedModel.generateContent([
-          Content.text(sourceText),
-        ]);
+        // DISPATCHED CALL
+        final response = await _dispatcher.dispatch(
+          type: ApiType.gemini,
+          description: "Recipe Extraction",
+          contextId: contextId,
+          task: () => specializedModel.generateContent([Content.text(sourceText)]),
+        );
+        
         if (response.text == null) return null;
         return parseRecipe(response.text!, title, channel, url, thumbnail);
       },

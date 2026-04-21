@@ -190,9 +190,15 @@ class _RecipeErrorScreenState extends ConsumerState<RecipeErrorScreen> {
                       height: 56,
                       child: ElevatedButton(
                         onPressed: () async {
-                          await ref
-                              .read(recipesProvider.notifier)
-                              .processRecipeImmediately(currentRecipe.id!);
+                          try {
+                            await ref
+                                .read(recipesProvider.notifier)
+                                .resumeExtraction(currentRecipe.id!);
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(e.toString())),
+                            );
+                          }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF944A00),

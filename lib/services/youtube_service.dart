@@ -1,10 +1,14 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt_explode;
 import 'transcript_service.dart';
+import 'rate_limit_dispatcher.dart';
 
 class YouTubeService {
   final yt_explode.YoutubeExplode _yt = yt_explode.YoutubeExplode();
   final TranscriptService _transcriptService = TranscriptService();
+  final RateLimitDispatcher _dispatcher;
+
+  YouTubeService({required RateLimitDispatcher dispatcher}) : _dispatcher = dispatcher;
 
   Future<Map<String, dynamic>> fetchVideoMetadataOnly(String url) async {
     if (kIsWeb) {
@@ -18,7 +22,13 @@ class YouTubeService {
       };
     }
     try {
-      final video = await _yt.videos.get(url);
+      // DISPATCHED CALL
+      final video = await _dispatcher.dispatch(
+        type: ApiType.youtube,
+        description: "Metadata Fetch",
+        task: () => _yt.videos.get(url),
+      );
+
       return {
         'success': true,
         'title': video.title,
@@ -36,7 +46,12 @@ class YouTubeService {
     String videoId, {
     bool isShort = false,
   }) async {
-    return await _transcriptService.fetchTranscript(videoId, isShort: isShort);
+    // DISPATCHED CALL
+    return await _dispatcher.dispatch(
+      type: ApiType.youtube,
+      description: "Transcript Fetch",
+      task: () => _transcriptService.fetchTranscript(videoId, isShort: isShort),
+    );
   }
 
   Future<Map<String, dynamic>> fetchVideoDetailsAndTranscript(
@@ -73,4 +88,3 @@ class YouTubeService {
     }
   }
 }
-

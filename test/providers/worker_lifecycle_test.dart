@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:android_app/providers/providers.dart';
 import 'package:android_app/models/recipe.dart';
 import 'package:android_app/models/validation_result.dart';
+import 'package:android_app/models/transcript_error.dart';
 import 'package:android_app/data/database_helper.dart';
 import 'package:android_app/services/youtube_service.dart';
 import 'package:android_app/services/gemini_service.dart';
@@ -28,7 +30,7 @@ void main() {
     registerFallbackValue(Recipe(dishName: '', category: '', ingredients: '', recipe: ''));
   });
 
-  group('Worker Lifecycle Tests', () {
+  group('Worker Logic: Halt & Auto-Advance Tests', () {
     late MockSecureStorage mockStorage;
     late MockYouTubeService mockYT;
     late MockGeminiService mockGemini;
@@ -47,7 +49,6 @@ void main() {
       when(() => mockStorage.write(key: any(named: 'key'), value: any(named: 'value')))
           .thenAnswer((_) async => {});
 
-      // Mock DB logic to update our local stateList
       when(() => mockDB.getAllRecipes()).thenAnswer((_) async => stateList);
       when(() => mockDB.insert(any())).thenAnswer((inv) async {
         final r = inv.positionalArguments[0] as Recipe;
@@ -75,7 +76,7 @@ void main() {
     });
 
     test('Full Lifecycle: Metadata -> Transcript -> Gemini -> Completed', () async {
-      const testUrl = 'https://www.youtube.com/watch?v=12345678901';
+      const testUrl = 'https://www.youtube.com/watch?v=ABC12345678';
 
       // 1. Mock Metadata
       when(() => mockYT.fetchVideoMetadataOnly(testUrl)).thenAnswer((_) async => {
@@ -93,15 +94,17 @@ void main() {
       });
 
       // 3. Mock Gemini
-      when(() => mockGemini.detectLanguage(any())).thenAnswer((_) async => 'en');
-      when(() => mockGemini.validateContent(any())).thenAnswer((_) async => {'result': ValidationResult.valid});
+      when(() => mockGemini.detectLanguage(any())).thenAnswer((_) async => ('en', 'gemini-1.5-flash'));
+      when(() => mockGemini.validateContent(any(), modelName: any(named: 'modelName'))).thenAnswer((_) async => {'result': ValidationResult.valid});
       when(() => mockGemini.extractRecipeFromContent(
         title: any(named: 'title'),
         channel: any(named: 'channel'),
         url: any(named: 'url'),
         thumbnail: any(named: 'thumbnail'),
         transcript: any(named: 'transcript'),
+        modelName: any(named: 'modelName'),
       )).thenAnswer((_) async => Recipe(
+        id: 1,
         dishName: 'AI Extracted Pizza',
         category: 'Dinner',
         ingredients: 'Flour, Water',
@@ -125,31 +128,61 @@ void main() {
       expect(finalRecipe.dishName, 'AI Extracted Pizza');
     });
 
-    test('Should handle Transcript Failure gracefully', () async {
-      const testUrl = 'https://www.youtube.com/watch?v=FAIL1234567';
+    test('429 Error should trigger Global Halt and stop the worker', () async {
+      const testUrl = 'https://www.youtube.com/watch?v=ABC12345678';
       
-      when(() => mockYT.fetchVideoMetadataOnly(testUrl)).thenAnswer((_) async => {
-        'success': true,
-        'title': 'Failing Recipe',
-      });
-
-      when(() => mockYT.fetchTranscriptOnly(any(), isShort: any(named: 'isShort'))).thenAnswer((_) async => {
-        'success': false,
-        'error': 'No Transcript Found',
-      });
+      when(() => mockYT.fetchVideoMetadataOnly(any())).thenAnswer((_) async => {'success': true, 'title': 'Limit Test'});
+      when(() => mockYT.fetchTranscriptOnly(any(), isShort: any(named: 'isShort'))).thenAnswer((_) async => {'success': true, 'transcript': 'text'});
+      
+      // Simulate 429
+      when(() => mockGemini.detectLanguage(any())).thenThrow(TranscriptFetchError.apiLimitReached);
 
       await container.read(recipesProvider.notifier).triggerMagicImport(testUrl);
       
-      bool failed = false;
+      await Future.delayed(const Duration(seconds: 1));
+
+      expect(container.read(globalHaltProvider), true);
+      expect(stateList.first.importStatus, 'No transcript found');
+    });
+
+    test('Finishing one recipe should automatically start the next In Queue recipe (Auto-Advance)', () async {
+      const url1 = 'https://www.youtube.com/watch?v=ABC12345678';
+      const url2 = 'https://www.youtube.com/watch?v=XYZ09876543';
+
+      when(() => mockYT.fetchVideoMetadataOnly(any())).thenAnswer((_) async => {'success': true, 'title': 'Test'});
+      when(() => mockYT.fetchTranscriptOnly(any(), isShort: any(named: 'isShort'))).thenAnswer((_) async => {'success': true, 'transcript': 'text'});
+      when(() => mockGemini.detectLanguage(any())).thenAnswer((_) async => ('en', 'gemini-1.5-flash'));
+      when(() => mockGemini.validateContent(any(), modelName: any(named: 'modelName'))).thenAnswer((_) async => {'result': ValidationResult.valid});
+      when(() => mockGemini.extractRecipeFromContent(
+        title: any(named: 'title'),
+        channel: any(named: 'channel'),
+        url: any(named: 'url'),
+        thumbnail: any(named: 'thumbnail'),
+        transcript: any(named: 'transcript'),
+        modelName: any(named: 'modelName'),
+      )).thenAnswer((_) async => Recipe(dishName: 'Done', category: '', ingredients: '', recipe: '', youtubeUrl: ''));
+
+      // 1. Trigger first import
+      await container.read(recipesProvider.notifier).triggerMagicImport(url1);
+      
+      // 2. Trigger second import (starts as Paused)
+      await container.read(recipesProvider.notifier).triggerMagicImport(url2);
+      expect(stateList.last.importStatus, 'Paused');
+
+      // 3. Force the second one to be In Queue
+      stateList[1] = stateList[1].copyWith(importStatus: 'In Queue');
+
+      // 4. Wait for auto-advance
+      bool secondStarted = false;
       for (int i = 0; i < 30; i++) {
-        await Future.delayed(const Duration(milliseconds: 300));
-        if (stateList.isNotEmpty && stateList.any((r) => r.importStatus == 'No transcript found')) {
-          failed = true;
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (stateList.length > 1 && stateList[1].importStatus == 'Completed') {
+          secondStarted = true;
           break;
         }
       }
 
-      expect(failed, true);
+      expect(secondStarted, true, reason: 'Worker should auto-advance to next In Queue item');
     });
   });
 }

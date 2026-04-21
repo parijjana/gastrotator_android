@@ -557,16 +557,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ? Text("${recipe.category} • ${recipe.totalCalories?.toStringAsFixed(0) ?? 0} kcal")
                     : Builder(builder: (context) {
                         final status = recipe.importStatus ?? "Pending...";
+                        Color statusColor = Colors.orange;
+                        String label = status;
+
                         if (status == "In Queue") {
-                          final pos = ref.read(recipesProvider.notifier).getRelativePosition(recipe.id!);
-                          return Text("In Queue (#$pos)", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold));
+                          statusColor = Colors.blue;
+                          label = "In Queue (Waiting)";
+                        } else if (status == "Paused") {
+                          statusColor = Colors.grey;
+                          label = "Extraction Paused";
+                        } else if (status.contains("Failed") || status.contains("No transcript")) {
+                          statusColor = Colors.red;
                         }
+
                         return Text(
-                          status,
+                          label,
                           style: TextStyle(
-                            color: status.contains("Failed") == true || status.contains("No transcript") == true
-                                ? Colors.red
-                                : Colors.orange,
+                            color: statusColor,
                             fontWeight: FontWeight.bold,
                           ),
                         );
@@ -574,14 +581,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (recipe.importStatus == "In Queue")
+                    if (recipe.importStatus == "Paused")
                       IconButton(
-                        icon: const Icon(Icons.bolt, color: Colors.orange),
-                        tooltip: "Process Now",
-                        onPressed: () {
-                          HapticFeedback.vibrate();
-                          ref.read(recipesProvider.notifier).processRecipeImmediately(recipe.id!);
+                        icon: const Icon(Icons.play_arrow_rounded, color: Colors.green),
+                        tooltip: "Resume Extraction",
+                        onPressed: () async {
+                          try {
+                            await ref.read(recipesProvider.notifier).resumeExtraction(recipe.id!);
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(e.toString())),
+                            );
+                          }
                         },
+                      ),
+                    if (recipe.importStatus != "Completed" &&
+                        recipe.importStatus != "Paused" &&
+                        recipe.importStatus != "In Queue" &&
+                        recipe.importStatus?.startsWith("Failed") == false &&
+                        recipe.importStatus != "No transcript found")
+                      IconButton(
+                        icon: const Icon(Icons.pause_rounded, color: Colors.orange),
+                        tooltip: "Pause Extraction",
+                        onPressed: () => ref.read(recipesProvider.notifier).pauseExtraction(recipe.id!),
                       ),
                     IconButton(
                       icon: const Icon(Icons.delete_outline, color: Colors.red),

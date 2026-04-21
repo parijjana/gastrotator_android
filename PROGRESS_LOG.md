@@ -35,11 +35,21 @@
     - **Branching Implementation:** Established a dual-track Git strategy. 
         - `main`: Stable track for v1.1.x bug fixes and production releases.
         - `develop`: Feature track for v1.2.0+ development.
-    - **Definitive v1.1.4 Build:** Generated the final production AAB (Build 5) with modernized navigation, ergonomic search pill, and generic brand-compliant copy.
+    - **Definitive v1.1.5 Build:** Generated the final production AAB (Build 6) with the fully integrated **RateLimitDispatcher** (Gatekeeper) architecture.
+    - **System Documentation:** Created `docs/RATE_LIMITING_ARCHITECTURE.md` to detail the technical rationale for the custom throttling engine and the specific regressions (429s, discovery loops) it resolves.
 - **Modernized Navigation & UX Refactor:**
     - **Architecture Overhaul:** Implemented `MainNavigationScreen` with a persistent bottom navigation bar (Kitchen, Settings, About), replacing the top-level icon-based navigation.
     - **Ergonomic Search Pill:** Relocated the search/import bar to a floating bottom overlay on the `HomeScreen` for better one-handed reachability.
     - **Consolidated Import Flow:** Removed the redundant `ImportRecipeScreen`. Functional parity was maintained by integrating direct URL pasting and YouTube fallback search into the unified home search pill.
     - **Onboarding Improvement:** Replaced the "Load Samples" button with a high-visibility, 3-step instructional empty state (Find ➔ Paste ➔ Cook) to guide new users immediately upon first run.
     - **Header Cleanup:** Removed redundant "About", "Settings", "Help", and "Load Samples" buttons from the top AppBars across the application.
-    - **Verified Stability:** Updated all unit, widget, and integration tests to reflect the new navigation structure, achieving **100% Green (52/52 tests passing)**.
+    - **Verified Stability:** Updated all unit, widget, and integration tests to reflect the new navigation structure, achieving **100% Green (55/55 tests passing)**.
+
+### Date: 2026-04-18 (v1.2.0 Planning)
+- **AI Architecture Design:** 
+    - Drafted a tiered "Smart Hybrid" AI plan:
+        1. **Tier 1 (AICore/Gemini Nano):** System-managed on-device inference for classification/summarization.
+        2. **Tier 2 (Local Gemma):** Offline fallback via MediaPipe or `llama_cpp_dart`.
+        3. **Tier 3 (Remote Gemini):** Primary API for complex recipe extraction.
+    - Analyzed Flutter-native alternatives (FFI, OpenRouter, TFLite) for better portability.
+- **Repository Management:** Successfully pushed v1.1.4 definitive release to GitHub and established the `develop` branch for v1.2.0 innovation.
