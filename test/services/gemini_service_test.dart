@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:android_app/services/gemini_service.dart';
+import 'package:android_app/services/ai/remote_gemini_engine.dart';
 import 'package:android_app/services/rate_limit_dispatcher.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:mocktail/mocktail.dart';
@@ -7,7 +7,7 @@ import 'package:mocktail/mocktail.dart';
 class MockRateLimitDispatcher extends Mock implements RateLimitDispatcher {}
 
 void main() {
-  late GeminiService geminiService;
+  late RemoteGeminiEngine geminiService;
   late MockRateLimitDispatcher mockDispatcher;
 
   setUpAll(() {
@@ -17,10 +17,10 @@ void main() {
 
   setUp(() {
     mockDispatcher = MockRateLimitDispatcher();
-    geminiService = GeminiService(apiKey: 'test_key', dispatcher: mockDispatcher);
+    geminiService = RemoteGeminiEngine(apiKey: 'test_key', dispatcher: mockDispatcher);
   });
 
-  group('GeminiService Parsing', () {
+  group('RemoteGeminiEngine Parsing', () {
     test('parseRecipe should correctly map a valid JSON string to a Recipe object', () {
       const jsonText = '''
       {

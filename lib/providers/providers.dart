@@ -7,7 +7,8 @@ import '../models/recipe.dart';
 import '../models/transcript_error.dart';
 import '../models/validation_result.dart';
 import '../models/video_length.dart';
-import '../services/gemini_service.dart';
+import '../services/ai/culinary_ai_orchestrator.dart';
+import '../services/ai/remote_gemini_engine.dart';
 import '../services/youtube_service.dart';
 import '../utils/youtube_url_parser.dart';
 import '../services/rate_limit_dispatcher.dart';
@@ -104,24 +105,26 @@ final globalHaltProvider = NotifierProvider<GlobalHaltNotifier, bool>(
 );
 
 final geminiServiceProvider =
-    Provider.family<GeminiService, String?>((ref, contextId) {
+    Provider.family<CulinaryAiOrchestrator, String?>((ref, contextId) {
   // Note: We use synchronous watch here, but the worker awaits the future first
   final apiKey = ref.watch(apiKeyProvider).value ?? '';
   final lastModel = ref.watch(lastSuccessfulModelProvider);
   final dispatcher = ref.watch(rateLimitDispatcherProvider);
 
-  return GeminiService(
+  final orchestrator = CulinaryAiOrchestrator();
+
+  // Register Remote Gemini as the default fallback
+  orchestrator.registerEngine(RemoteGeminiEngine(
     apiKey: apiKey,
     dispatcher: dispatcher,
     lastSuccessfulModel: lastModel,
     onModelSuccess: (modelName) {
       ref.read(lastSuccessfulModelProvider.notifier).set(modelName);
-      ref
-          .read(secureStorageProvider)
-          .write(key: 'last_successful_model', value: modelName);
     },
     contextId: contextId,
-  );
+  ));
+
+  return orchestrator;
 });
 
 // --- External Services Providers ---
@@ -682,14 +685,14 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
             double currentTime = (seg['start'] as num?)?.toDouble() ?? 0.0;
 
             if (currentTime - chunkStartTime > 300) {
-              final summary = await gemini.summarizeSegment(currentChunk, modelName: modelUsed);
+              final summary = await gemini.summarize(currentChunk, modelName: modelUsed);
               if (summary != null) summaries.add(summary);
               currentChunk = "";
               chunkStartTime = currentTime;
             }
           }
           if (currentChunk.isNotEmpty) {
-            final summary = await gemini.summarizeSegment(currentChunk, modelName: modelUsed);
+            final summary = await gemini.summarize(currentChunk, modelName: modelUsed);
             if (summary != null) summaries.add(summary);
           }
           finalInputText = summaries.join("\n\n---\n\n");
@@ -700,7 +703,7 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
       await updateRecipe(
         recipeWithVal.copyWith(importStatus: "AI Processing..."),
       );
-      final result = await gemini.extractRecipeFromContent(
+      final result = await gemini.extractRecipe(
         title: recipeWithVal.youtubeTitle ?? recipeWithVal.dishName,
         channel: recipeWithVal.youtubeChannel ?? "Unknown",
         url: recipeWithVal.youtubeUrl!,
@@ -727,9 +730,7 @@ class RecipesNotifier extends Notifier<List<Recipe>> {
           "Gemini failed to return a valid recipe.",
           contextId: contextId,
         );
-        await updateRecipe(
-          recipeWithVal.copyWith(importStatus: "Failed: Gemini"),
-        );
+        await updateRecipe(recipeWithVal.copyWith(importStatus: "Failed: Gemini"));
       }
     } on TranscriptFetchError catch (e) {
       if (!ref.mounted) return;

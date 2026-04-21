@@ -1,13 +1,16 @@
 import 'dart:convert';
 import 'package:google_generative_ai/google_generative_ai.dart';
-import '../models/recipe.dart';
-import '../models/validation_result.dart';
+import '../../models/recipe.dart';
+import '../../models/validation_result.dart';
 import 'package:http/http.dart' as http;
-import '../models/transcript_error.dart';
-import 'rate_limit_dispatcher.dart';
-import 'logger/app_logger.dart';
+import '../../models/transcript_error.dart';
+import '../logger/app_logger.dart';
+import '../rate_limit_dispatcher.dart';
+import 'culinary_ai_engine.dart';
 
-class GeminiService {
+/// [REFACTORED]: Remote Gemini implementation of CulinaryAiEngine.
+/// This maintains the "Model Ladder" logic for API-based extraction.
+class RemoteGeminiEngine implements CulinaryAiEngine {
   final String apiKey;
   final GenerativeModel? _mockModel;
   final AppLogger _logger = AppLogger();
@@ -17,10 +20,16 @@ class GeminiService {
   final http.Client _httpClient;
   final RateLimitDispatcher _dispatcher;
 
+  @override
+  String get name => "Gemini API (Remote)";
+
+  @override
+  bool get isLocal => false;
+
   // Priority order for families (Generic keywords, no hardcoded versions)
   static const List<String> _priorityKeywords = ['flash', 'gemma', 'pro'];
 
-  GeminiService({
+  RemoteGeminiEngine({
     required this.apiKey,
     required RateLimitDispatcher dispatcher,
     GenerativeModel? mockModel,
@@ -243,6 +252,7 @@ class GeminiService {
     return null;
   }
 
+  @override
   Future<(String? result, String? modelUsed)> detectLanguage(String text) async {
     String? used;
     final result = await _runWithLadder<String>(
@@ -268,6 +278,7 @@ class GeminiService {
     return (result, used);
   }
 
+  @override
   Future<Map<String, dynamic>> validateContent(String transcript, {String? modelName}) async {
     if (transcript.split(' ').length < 200) {
       return {'result': ValidationResult.insufficientContent};
@@ -329,7 +340,8 @@ class GeminiService {
     return result ?? {'result': ValidationResult.lowConfidence};
   }
 
-  Future<String?> summarizeSegment(String text, {String? modelName}) async {
+  @override
+  Future<String?> summarize(String text, {String? modelName}) async {
     return _runWithLadder<String>(
       actionName: "Segment Summary",
       modelOverride: modelName,
@@ -412,7 +424,8 @@ class GeminiService {
     }
   }
 
-  Future<Recipe?> extractRecipeFromContent({
+  @override
+  Future<Recipe?> extractRecipe({
     required String title,
     required String channel,
     required String url,

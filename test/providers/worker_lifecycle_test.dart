@@ -7,14 +7,14 @@ import 'package:android_app/models/validation_result.dart';
 import 'package:android_app/models/transcript_error.dart';
 import 'package:android_app/data/database_helper.dart';
 import 'package:android_app/services/youtube_service.dart';
-import 'package:android_app/services/gemini_service.dart';
+import 'package:android_app/services/ai/culinary_ai_orchestrator.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockSecureStorage extends Mock implements FlutterSecureStorage {}
 class MockYouTubeService extends Mock implements YouTubeService {}
-class MockGeminiService extends Mock implements GeminiService {}
+class MockCulinaryAiOrchestrator extends Mock implements CulinaryAiOrchestrator {}
 class MockDatabaseHelper extends Mock implements DatabaseHelper {}
 
 class MockApiKeyNotifier extends ApiKeyNotifier {
@@ -33,7 +33,7 @@ void main() {
   group('Worker Logic: Halt & Auto-Advance Tests', () {
     late MockSecureStorage mockStorage;
     late MockYouTubeService mockYT;
-    late MockGeminiService mockGemini;
+    late MockCulinaryAiOrchestrator mockOrchestrator;
     late MockDatabaseHelper mockDB;
     late ProviderContainer container;
     late List<Recipe> stateList;
@@ -41,7 +41,7 @@ void main() {
     setUp(() async {
       mockStorage = MockSecureStorage();
       mockYT = MockYouTubeService();
-      mockGemini = MockGeminiService();
+      mockOrchestrator = MockCulinaryAiOrchestrator();
       mockDB = MockDatabaseHelper();
       stateList = [];
 
@@ -49,6 +49,7 @@ void main() {
       when(() => mockStorage.write(key: any(named: 'key'), value: any(named: 'value')))
           .thenAnswer((_) async => {});
 
+      // Mock DB logic to update our local stateList
       when(() => mockDB.getAllRecipes()).thenAnswer((_) async => stateList);
       when(() => mockDB.insert(any())).thenAnswer((inv) async {
         final r = inv.positionalArguments[0] as Recipe;
@@ -68,14 +69,14 @@ void main() {
           secureStorageProvider.overrideWith((ref) => mockStorage),
           apiKeyProvider.overrideWith(() => MockApiKeyNotifier()),
           youTubeServiceProvider.overrideWith((ref) => mockYT),
-          geminiServiceProvider.overrideWith((ref, contextId) => mockGemini),
+          geminiServiceProvider.overrideWith((ref, contextId) => mockOrchestrator),
           databaseHelperProvider.overrideWith((ref) => mockDB),
           workerEnabledProvider.overrideWith((ref) => true),
         ],
       );
     });
 
-    test('Full Lifecycle: Metadata -> Transcript -> Gemini -> Completed', () async {
+    test('Full Lifecycle: Metadata -> Transcript -> AI -> Completed', () async {
       const testUrl = 'https://www.youtube.com/watch?v=ABC12345678';
 
       // 1. Mock Metadata
@@ -93,10 +94,10 @@ void main() {
         'durationSeconds': 60.0,
       });
 
-      // 3. Mock Gemini
-      when(() => mockGemini.detectLanguage(any())).thenAnswer((_) async => ('en', 'gemini-1.5-flash'));
-      when(() => mockGemini.validateContent(any(), modelName: any(named: 'modelName'))).thenAnswer((_) async => {'result': ValidationResult.valid});
-      when(() => mockGemini.extractRecipeFromContent(
+      // 3. Mock AI Orchestrator
+      when(() => mockOrchestrator.detectLanguage(any())).thenAnswer((_) async => ('en', 'gemini-1.5-flash'));
+      when(() => mockOrchestrator.validateContent(any(), modelName: any(named: 'modelName'))).thenAnswer((_) async => {'result': ValidationResult.valid});
+      when(() => mockOrchestrator.extractRecipe(
         title: any(named: 'title'),
         channel: any(named: 'channel'),
         url: any(named: 'url'),
@@ -129,13 +130,13 @@ void main() {
     });
 
     test('429 Error should trigger Global Halt and stop the worker', () async {
-      const testUrl = 'https://www.youtube.com/watch?v=ABC12345678';
+      const testUrl = 'https://www.youtube.com/watch?v=3iNyUwPKrXQ';
       
       when(() => mockYT.fetchVideoMetadataOnly(any())).thenAnswer((_) async => {'success': true, 'title': 'Limit Test'});
       when(() => mockYT.fetchTranscriptOnly(any(), isShort: any(named: 'isShort'))).thenAnswer((_) async => {'success': true, 'transcript': 'text'});
       
       // Simulate 429
-      when(() => mockGemini.detectLanguage(any())).thenThrow(TranscriptFetchError.apiLimitReached);
+      when(() => mockOrchestrator.detectLanguage(any())).thenThrow(TranscriptFetchError.apiLimitReached);
 
       await container.read(recipesProvider.notifier).triggerMagicImport(testUrl);
       
@@ -146,14 +147,14 @@ void main() {
     });
 
     test('Finishing one recipe should automatically start the next In Queue recipe (Auto-Advance)', () async {
-      const url1 = 'https://www.youtube.com/watch?v=ABC12345678';
-      const url2 = 'https://www.youtube.com/watch?v=XYZ09876543';
+      const url1 = 'https://www.youtube.com/watch?v=3iNyUwPKrXQ';
+      const url2 = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
 
       when(() => mockYT.fetchVideoMetadataOnly(any())).thenAnswer((_) async => {'success': true, 'title': 'Test'});
       when(() => mockYT.fetchTranscriptOnly(any(), isShort: any(named: 'isShort'))).thenAnswer((_) async => {'success': true, 'transcript': 'text'});
-      when(() => mockGemini.detectLanguage(any())).thenAnswer((_) async => ('en', 'gemini-1.5-flash'));
-      when(() => mockGemini.validateContent(any(), modelName: any(named: 'modelName'))).thenAnswer((_) async => {'result': ValidationResult.valid});
-      when(() => mockGemini.extractRecipeFromContent(
+      when(() => mockOrchestrator.detectLanguage(any())).thenAnswer((_) async => ('en', 'gemini-1.5-flash'));
+      when(() => mockOrchestrator.validateContent(any(), modelName: any(named: 'modelName'))).thenAnswer((_) async => {'result': ValidationResult.valid});
+      when(() => mockOrchestrator.extractRecipe(
         title: any(named: 'title'),
         channel: any(named: 'channel'),
         url: any(named: 'url'),
